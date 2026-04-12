@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+.bg-split {
+  background: linear-gradient(to bottom, #5a62f6 50%, white 50%);
+}
+
+body {
+  font-family: "Inter", "Figtree", "Montserrat", sans-serif;
+}

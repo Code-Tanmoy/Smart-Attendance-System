@@ -1,0 +1,3 @@
+cd python-face-api
+venv\Scripts\activate
+python app.py
