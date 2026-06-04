@@ -10,8 +10,10 @@ import {
   FaCalendarAlt,
   FaEdit,
   FaTimes,
+  FaSearch,
 } from "react-icons/fa";
 import { backend } from "../services/api";
+import toast from "react-hot-toast"; // 🟢 NEW: Imported React Hot Toast
 
 // 🟢 MAP YEARS TO VALID SEMESTERS
 const semesterMap = {
@@ -23,18 +25,24 @@ const semesterMap = {
 
 const Schedule = () => {
   const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // 🟢 FORM STATE
   const [newSubject, setNewSubject] = useState({
     name: "",
     teacher: "",
+    teacherId: "",
     department: "",
     year: "",
     semester: "",
     startTime: "",
     endTime: "",
   });
+
+  // 🟢 SEARCHABLE DROPDOWN STATE
+  const [teacherSearch, setTeacherSearch] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
 
   // 🟢 EDIT MODE STATE
   const [editingId, setEditingId] = useState(null);
@@ -44,11 +52,11 @@ const Schedule = () => {
   const [filterYear, setFilterYear] = useState("All");
   const [filterSemester, setFilterSemester] = useState("All");
 
-  // Reference for Auto-Focus
   const endTimeRef = useRef(null);
 
   useEffect(() => {
     fetchSubjects();
+    fetchTeachers();
   }, []);
 
   const fetchSubjects = async () => {
@@ -62,26 +70,30 @@ const Schedule = () => {
     }
   };
 
-  // 🟢 SMART CHANGE HANDLER
+  const fetchTeachers = async () => {
+    try {
+      const res = await backend.get("/api/teachers");
+      setTeachers(res.data);
+    } catch (err) {
+      console.error("Failed to fetch teachers");
+    }
+  };
+
   const handleChange = (e) => {
     let { name, value } = e.target;
 
-    // 1. Force Uppercase for Name and Teacher
-    if (name === "name" || name === "teacher") {
+    if (name === "name") {
       value = value.toUpperCase();
     }
 
     setNewSubject((prev) => {
       const updated = { ...prev, [name]: value };
-
-      // 2. Dynamic Semester Reset
       if (name === "year") {
         updated.semester = "";
       }
       return updated;
     });
 
-    // 3. Auto-Focus Logic: Jump to End Time when Start Time is filled
     if (name === "startTime" && value) {
       if (endTimeRef.current) {
         endTimeRef.current.focus();
@@ -89,51 +101,61 @@ const Schedule = () => {
     }
   };
 
-  // 🟢 SUBMIT HANDLER (Handles both Add and Update)
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!newSubject.teacherId) {
+      // 🟢 NEW: Replaced alert with custom icon toast
+      return toast.error("Please select a teacher from the dropdown list.", {
+        icon: "🧑‍🏫",
+      });
+    }
+
+    // 🟢 NEW: Fire a loading toast based on the mode (edit or create)
+    const saveToast = toast.loading(
+      editingId ? "Updating class schedule..." : "Scheduling new class...",
+    );
+
     try {
       if (editingId) {
-        // UPDATE Existing Class
         await backend.put(`/api/subjects/${editingId}`, newSubject);
-        alert("Class Updated Successfully!");
+        toast.success("Class Updated Successfully!", { id: saveToast });
       } else {
-        // ADD New Class
         await backend.post("/api/subjects", newSubject);
-        alert("Class Scheduled Successfully!");
+        toast.success("Class Scheduled Successfully!", { id: saveToast });
       }
       resetForm();
       fetchSubjects();
     } catch (err) {
-      alert(
-        err.response?.data?.message ||
-          "Failed to save class. Check for conflicts.",
-      );
+      toast.error(err.response?.data?.message || "Failed to save class.", {
+        id: saveToast,
+      });
     }
   };
 
-  // 🟢 EDIT BUTTON CLICK HANDLER
   const handleEditClick = (sub) => {
     setEditingId(sub._id);
     setNewSubject({
       name: sub.name,
       teacher: sub.teacher,
+      teacherId: sub.teacherId || "",
       department: sub.department,
       year: sub.year,
       semester: sub.semester,
       startTime: sub.startTime,
       endTime: sub.endTime,
     });
-    // Scroll to top so user sees the form immediately (helpful on mobile)
+    // Pre-fill the search box so it looks correct when editing
+    setTeacherSearch(`${sub.teacher} (${sub.teacherId})`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 🟢 RESET FORM HANDLER
   const resetForm = () => {
     setEditingId(null);
+    setTeacherSearch(""); // Reset search box
     setNewSubject({
       name: "",
       teacher: "",
+      teacherId: "",
       department: "",
       year: "",
       semester: "",
@@ -144,15 +166,27 @@ const Schedule = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this scheduled class?")) return;
+
+    // 🟢 NEW: Loading toast for deletion
+    const deleteToast = toast.loading("Deleting scheduled class...");
+
     try {
       await backend.delete(`/api/subjects/${id}`);
       fetchSubjects();
+      toast.success("Class deleted successfully.", { id: deleteToast });
     } catch (err) {
-      alert("Failed to delete class");
+      toast.error("Failed to delete class.", { id: deleteToast });
     }
   };
 
-  // 🟢 FILTER & SORT LOGIC
+  // 🟢 SMART FILTER FOR TEACHER SEARCH
+  const filteredTeachers = teachers.filter(
+    (t) =>
+      t.name.toLowerCase().includes(teacherSearch.toLowerCase()) ||
+      t.teacherId.toLowerCase().includes(teacherSearch.toLowerCase()) ||
+      t.department.toLowerCase().includes(teacherSearch.toLowerCase()),
+  );
+
   const filteredSubjects = subjects
     .filter((sub) => {
       const matchDept = filterDept === "All" || sub.department === filterDept;
@@ -162,14 +196,9 @@ const Schedule = () => {
       return matchDept && matchYear && matchSem;
     })
     .sort((a, b) => {
-      // 1st Priority: Sort by Year
       if (a.year !== b.year) return a.year.localeCompare(b.year);
-
-      // 2nd Priority: Sort by Semester
       if (a.semester !== b.semester)
         return a.semester.localeCompare(b.semester);
-
-      // 3rd Priority: Sort by Start Time
       return a.startTime.localeCompare(b.startTime);
     });
 
@@ -227,22 +256,72 @@ const Schedule = () => {
               </div>
             </div>
 
-            {/* Teacher Name */}
-            <div>
+            {/* 🟢 CUSTOM SEARCHABLE TEACHER DROPDOWN */}
+            <div className="relative">
               <label className="text-[10px] font-bold text-gray-400 uppercase">
-                Teacher Name
+                Assigned Teacher
               </label>
               <div className="relative mt-1">
-                <FaChalkboardTeacher className="absolute left-3 top-3 text-gray-400 text-sm" />
+                <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
                 <input
                   required
                   type="text"
-                  name="teacher"
-                  value={newSubject.teacher}
-                  onChange={handleChange}
-                  placeholder="EX: PROF. ....."
+                  value={teacherSearch}
+                  onFocus={() => setShowDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)} // Delay so click registers
+                  onChange={(e) => {
+                    setTeacherSearch(e.target.value);
+                    setShowDropdown(true);
+                    // Clear backend state if they start typing again
+                    setNewSubject((prev) => ({
+                      ...prev,
+                      teacherId: "",
+                      teacher: "",
+                    }));
+                  }}
+                  placeholder="Search by name, ID, or Dept..."
                   className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700"
                 />
+
+                {/* 🟢 The Dropdown Menu */}
+                {showDropdown && (
+                  <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                    {filteredTeachers.length > 0 ? (
+                      filteredTeachers.map((t) => (
+                        <div
+                          key={t._id}
+                          // onMouseDown fires before onBlur, ensuring the click registers
+                          onMouseDown={() => {
+                            setNewSubject((prev) => ({
+                              ...prev,
+                              teacherId: t.teacherId,
+                              teacher: t.name.toUpperCase(),
+                            }));
+                            setTeacherSearch(
+                              `${t.name.toUpperCase()} (${t.teacherId})`,
+                            );
+                            setShowDropdown(false);
+                          }}
+                          className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+                        >
+                          <div className="font-bold text-gray-800">
+                            {t.name.toUpperCase()}
+                          </div>
+                          <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-blue-600">
+                              {t.teacherId}
+                            </span>
+                            <span>• {t.department}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-4 text-center text-sm text-gray-500 italic">
+                        No teachers found.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -391,11 +470,9 @@ const Schedule = () => {
             </div>
 
             {/* 🔍 FILTERS */}
-            {/* 🔍 FILTERS */}
             <div className="flex flex-wrap items-center gap-3">
               <FaFilter className="text-gray-400 text-sm" />
 
-              {/* 🟢 NEW: Department Filter */}
               <select
                 value={filterDept}
                 onChange={(e) => setFilterDept(e.target.value)}

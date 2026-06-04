@@ -5,13 +5,12 @@ import {
   FaBook,
   FaPhoneAlt,
   FaCamera,
-  FaCheckCircle,
-  FaExclamationTriangle,
+  FaEnvelope,
   FaUniversity,
-  FaCalendarAlt,
-  FaLayerGroup,
+  FaIdBadge,
 } from "react-icons/fa";
 import { backend, faceApi } from "../services/api";
+import toast from "react-hot-toast"; // 🟢 NEW: Imported React Hot Toast
 
 const Addstudent = () => {
   const videoRef = useRef(null);
@@ -21,6 +20,7 @@ const Addstudent = () => {
   const [student, setStudent] = useState({
     name: "",
     urn: "",
+    email: "",
     age: "",
     phone: "",
     department: "",
@@ -38,6 +38,8 @@ const Addstudent = () => {
         if (videoRef.current) videoRef.current.srcObject = stream;
       } catch (err) {
         console.error("Error accessing webcam: ", err);
+        // 🟢 NEW: Added a toast in case camera is blocked
+        toast.error("Camera access denied or unavailable.", { icon: "📸" });
       }
     };
     getCameraStream();
@@ -50,47 +52,37 @@ const Addstudent = () => {
     "4th Year": ["7th", "8th"],
   };
 
-  // const handleChange = (e) => {
-  //   setStudent({ ...student, [e.target.name]: e.target.value });
-  // };
   const handleChange = (e) => {
     let { name, value } = e.target;
 
-    // 🟢 1. NAME: Only Alphabets & Spaces, Force Uppercase
     if (name === "name") {
       value = value.replace(/[^a-zA-Z\s]/g, "").toUpperCase();
-    }
-    // 🟢 2. AGE: Only Numbers, Max 2 Digits
-    else if (name === "age") {
+    } else if (name === "age") {
       value = value.replace(/\D/g, "").slice(0, 2);
-    }
-    // 🟢 3. PHONE: Only Numbers, Max 10 Digits
-    else if (name === "phone") {
+    } else if (name === "phone") {
       value = value.replace(/\D/g, "").slice(0, 10);
     }
 
     setStudent((prev) => {
       const updatedStudent = { ...prev, [name]: value };
-
-      // 🟢 4. DYNAMIC SEMESTER: If Year changes, reset the Semester field
-      if (name === "year") {
-        updatedStudent.semester = "";
-      }
-
+      if (name === "year") updatedStudent.semester = "";
       return updatedStudent;
     });
   };
+
   const captureAndSend = async () => {
     if (
       !student.name ||
       !student.urn ||
+      !student.email ||
       !student.age ||
       !student.phone ||
       !student.department ||
       !student.year ||
       !student.semester
     ) {
-      alert("Please fill in ALL college details and student info.");
+      // 🟢 NEW: Replaced alert with error toast
+      toast.error("Please fill in ALL college details and student info.");
       return;
     }
 
@@ -103,39 +95,53 @@ const Addstudent = () => {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = canvas.toDataURL("image/jpeg");
 
+      // 🟢 NEW: Fire a loading toast for the multi-step enrollment
+      const enrollToast = toast.loading("Enrolling student face & data...");
+
       try {
-        // 1️⃣ Enroll face using Python API
-        await faceApi.post("/enroll", {
-          urn: student.urn,
-          image: imageData,
-        });
+        await faceApi.post("/enroll", { urn: student.urn, image: imageData });
 
-        // 2️⃣ Save student details in MongoDB (Backend now handles Hierarchy)
-        await backend.post("/api/students", student);
+        try {
+          await backend.post("/api/students", student);
 
-        alert(
-          `✅ Success! ${student.name} enrolled in ${student.department} (${student.year}).`,
-        );
+          // 🟢 NEW: Transform loading toast into success toast
+          toast.success(`${student.name} enrolled successfully!`, {
+            id: enrollToast,
+          });
 
-        // 3️⃣ Reset form
-        setStudent({
-          name: "",
-          urn: "",
-          age: "",
-          phone: "",
-          department: "",
-          year: "",
-          semester: "",
-        });
+          // Reset form including Email
+          setStudent({
+            name: "",
+            urn: "",
+            email: "",
+            age: "",
+            phone: "",
+            department: "",
+            year: "",
+            semester: "",
+          });
+        } catch (dbError) {
+          console.warn("Database save failed. Rolling back face enrollment...");
+          try {
+            await faceApi.post("/delete", { urn: student.urn });
+          } catch (rollbackError) {
+            console.error("CRITICAL: Rollback failed for URN:", student.urn);
+          }
+
+          throw new Error(
+            dbError.response?.data?.message ||
+              dbError.response?.data?.errors?.[0] ||
+              "Failed to save to database. Face data reversed.",
+          );
+        }
       } catch (err) {
-        console.error("Error:", err);
-        alert(
-          err.response?.data?.message ||
-            "❌ Failed to enroll. Please try again.",
-        );
+        // 🟢 NEW: Transform loading toast into error toast
+        toast.error(err.message || "Failed to enroll.", { id: enrollToast });
       } finally {
         setLoading(false);
       }
+    } else {
+      toast.error("Camera is not ready yet. Please wait a moment.");
     }
   };
 
@@ -147,31 +153,32 @@ const Addstudent = () => {
       </div>
 
       <div className="flex flex-col xl:flex-row gap-8">
-        {/* 📝 FORM SECTION */}
         <div className="w-full xl:w-2/5 bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-fit">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
             <FaUser className="text-blue-500" /> Basic Information
           </h2>
 
           <div className="space-y-4">
-            {/* Name & URN */}
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">
-                  Full Name
-                </label>
-                <div className="relative mt-1">
-                  <FaUser className="absolute left-4 top-3.5 text-gray-300" />
-                  <input
-                    type="text"
-                    name="name"
-                    value={student.name}
-                    onChange={handleChange}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Luffy"
-                  />
-                </div>
+            {/* Name */}
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">
+                Full Name
+              </label>
+              <div className="relative mt-1">
+                <FaUser className="absolute left-4 top-3.5 text-gray-300" />
+                <input
+                  type="text"
+                  name="name"
+                  value={student.name}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200"
+                  placeholder="LUFFY"
+                />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* URN */}
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase">
                   URN / ID
@@ -183,15 +190,12 @@ const Addstudent = () => {
                     name="urn"
                     value={student.urn}
                     onChange={handleChange}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200"
                     placeholder="276001..."
                   />
                 </div>
               </div>
-            </div>
-
-            {/* Age & Phone */}
-            <div className="grid grid-cols-2 gap-4">
+              {/* Age */}
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase">
                   Age
@@ -201,25 +205,50 @@ const Addstudent = () => {
                   name="age"
                   value={student.age}
                   onChange={handleChange}
-                  className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200"
                   placeholder="21"
                 />
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">
-                  Phone
-                </label>
-                <div className="relative mt-1">
-                  <FaPhoneAlt className="absolute left-4 top-3.5 text-gray-300 text-xs" />
-                  <input
-                    type="text"
-                    name="phone"
-                    value={student.phone}
-                    onChange={handleChange}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="9876..."
-                  />
-                </div>
+            </div>
+
+            {/* Email Input Box */}
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">
+                College Email
+              </label>
+              <div className="relative mt-1">
+                <FaEnvelope className="absolute left-4 top-3.5 text-gray-300" />
+                <input
+                  type="email"
+                  name="email"
+                  value={student.email}
+                  onChange={(e) =>
+                    setStudent({
+                      ...student,
+                      email: e.target.value.toLowerCase(),
+                    })
+                  }
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="student@gamil.com"
+                />
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">
+                Phone
+              </label>
+              <div className="relative mt-1">
+                <FaPhoneAlt className="absolute left-4 top-3.5 text-gray-300 text-xs" />
+                <input
+                  type="text"
+                  name="phone"
+                  value={student.phone}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200"
+                  placeholder="9876543210"
+                />
               </div>
             </div>
 
@@ -237,7 +266,7 @@ const Addstudent = () => {
                 name="department"
                 value={student.department}
                 onChange={handleChange}
-                className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200"
               >
                 <option value="">Select Dept</option>
                 <option value="CSE">Computer Science Eng (CSE)</option>
@@ -249,46 +278,47 @@ const Addstudent = () => {
               </select>
             </div>
 
-            {/* Year Dropdown */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase">
-                Year
-              </label>
-              <select
-                name="year"
-                value={student.year}
-                onChange={handleChange}
-                className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Year</option>
-                <option value="1st Year">1st Year</option>
-                <option value="2nd Year">2nd Year</option>
-                <option value="3rd Year">3rd Year</option>
-                <option value="4th Year">4th Year</option>
-              </select>
-            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Year Dropdown */}
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">
+                  Year
+                </label>
+                <select
+                  name="year"
+                  value={student.year}
+                  onChange={handleChange}
+                  className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200"
+                >
+                  <option value="">Select Year</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                </select>
+              </div>
 
-            {/* Semester Dropdown (Dynamic) */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase">
-                Semester
-              </label>
-              <select
-                name="semester"
-                value={student.semester}
-                onChange={handleChange}
-                disabled={!student.year} // 🟢 Locks the dropdown until a Year is chosen
-                className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="">Select Semester</option>
-                {/* 🟢 Only render the semesters that belong to the selected year */}
-                {student.year &&
-                  semesterMap[student.year].map((sem) => (
-                    <option key={sem} value={sem}>
-                      {sem} Sem
-                    </option>
-                  ))}
-              </select>
+              {/* Semester Dropdown */}
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">
+                  Semester
+                </label>
+                <select
+                  name="semester"
+                  value={student.semester}
+                  onChange={handleChange}
+                  disabled={!student.year}
+                  className="w-full mt-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 disabled:opacity-50"
+                >
+                  <option value="">Select Sem</option>
+                  {student.year &&
+                    semesterMap[student.year].map((sem) => (
+                      <option key={sem} value={sem}>
+                        {sem} Sem
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -309,9 +339,6 @@ const Addstudent = () => {
                 height="480"
                 className="hidden"
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-64 h-64 border-2 border-white/50 rounded-full border-dashed animate-pulse"></div>
-              </div>
             </div>
           </div>
 

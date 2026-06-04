@@ -6,6 +6,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const bodyParser = require("body-parser");
 const connectDB = require("./config/db");
+const mongoSanitize = require("express-mongo-sanitize");
 
 const auth = require("./middleware/auth");
 
@@ -15,6 +16,7 @@ const periodwiseRoutes = require("./routes/periodwise.routes");
 const authRoutes = require("./routes/auth.routes");
 const reportsRoutes = require("./routes/reports.routes");
 const subjectRoutes = require("./routes/subject.routes");
+const securityRoutes = require("./routes/security.routes");
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -23,7 +25,7 @@ app.use(
   cors({
     origin: "http://localhost:5173",
     credentials: true,
-  })
+  }),
 );
 
 app.use(cookieParser());
@@ -31,8 +33,16 @@ app.use(bodyParser.json());
 
 connectDB();
 
+// : Only sanitize the body to prevent Express crashes
+app.use((req, res, next) => {
+  if (req.body) {
+    req.body = mongoSanitize.sanitize(req.body, { replaceWith: "_" });
+  }
+  next();
+});
 // public
 app.use("/", authRoutes);
+app.use("/api/security", securityRoutes);
 
 // 🔒 PROTECTED ROUTES
 app.use("/api/students", studentsRoutes);

@@ -1,25 +1,28 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
-  FaUserGraduate,
-  FaClock,
+  FaChalkboardTeacher,
   FaCalendarAlt,
-  FaChartPie,
   FaSignOutAlt,
-  FaCheckCircle,
-  FaExclamationTriangle,
+  FaCamera,
+  FaClipboardList,
+  FaChartBar,
+  FaClock,
+  FaUsers,
   FaCog,
   FaLock,
   FaUserEdit,
+  FaUserShield,
   FaPhone,
   FaEnvelope,
+  FaTimes,
 } from "react-icons/fa";
 import { backend } from "../services/api";
 
-const StudentDashboard = () => {
-  const [data, setData] = useState(null);
+const TeacherDashboard = () => {
+  const [teacher, setTeacher] = useState(null);
+  const [myClasses, setMyClasses] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Force a re-render every minute so the "Live Now" badge updates automatically
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // 🟢 SETTINGS DROPDOWN & MODAL STATES
@@ -43,26 +46,44 @@ const StudentDashboard = () => {
   const [profileError, setProfileError] = useState("");
   const [isProfileLoading, setIsProfileLoading] = useState(false);
 
+  // Admin Contacts State
+  const [isAdminContactModalOpen, setIsAdminContactModalOpen] = useState(false);
+  const [adminContacts, setAdminContacts] = useState([]);
+  const [isAdminsLoading, setIsAdminsLoading] = useState(false);
+
   useEffect(() => {
-    const fetchMyData = async () => {
+    const fetchTeacherData = async () => {
       try {
-        const urn = localStorage.getItem("studentUrn");
-        if (!urn) {
+        const localTeacherId = localStorage.getItem("teacherId");
+        if (!localTeacherId) {
           window.location.href = "/signin";
           return;
         }
 
-        const res = await backend.get(
-          `/api/students/me/${urn}?_t=${Date.now()}`,
+        const [teachersRes, subjectsRes] = await Promise.all([
+          backend.get("/api/teachers"),
+          backend.get("/api/subjects"),
+        ]);
+
+        const currentTeacher = teachersRes.data.find(
+          (t) => t.teacherId === localTeacherId,
         );
-        setData(res.data);
+        setTeacher(currentTeacher);
+
+        const assignedClasses = subjectsRes.data.filter(
+          (sub) => sub.teacherId === localTeacherId,
+        );
+
+        assignedClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
+        setMyClasses(assignedClasses);
       } catch (err) {
-        console.error("Error fetching student data");
+        console.error("Error fetching teacher dashboard data:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchMyData();
+
+    fetchTeacherData();
 
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
@@ -71,6 +92,20 @@ const StudentDashboard = () => {
   const handleLogout = () => {
     localStorage.clear();
     window.location.href = "/signin";
+  };
+
+ // 🟢 UPDATED FUNCTION: Now checks for weekends!
+  const checkIsLive = (startTime, endTime) => {
+    // 1. Check if it's Saturday (6) or Sunday (0)
+    const today = new Date().getDay();
+    if (today === 0 || today === 6) return false; 
+
+    // 2. Normal time check
+    const currentStr =
+      currentTime.getHours().toString().padStart(2, "0") +
+      ":" +
+      currentTime.getMinutes().toString().padStart(2, "0");
+    return currentStr >= startTime && currentStr <= endTime;
   };
 
   // 🟢 HANDLE PASSWORD CHANGE
@@ -115,22 +150,15 @@ const StudentDashboard = () => {
     setIsProfileLoading(true);
 
     try {
-      const res = await backend.put(
-        "/api/students/me/update-profile",
-        profileData,
-      );
+      // Using the existing teacher update route
+      const res = await backend.put(`/api/teachers/${teacher._id}`, {
+        ...teacher, // Pass existing read-only data back
+        email: profileData.email,
+        phone: profileData.phone,
+      });
 
-      setProfileMessage(res.data.message);
-
-      // Update local state so UI reflects changes immediately without refresh
-      setData((prev) => ({
-        ...prev,
-        profile: {
-          ...prev.profile,
-          email: profileData.email,
-          phone: profileData.phone,
-        },
-      }));
+      setProfileMessage("Profile updated successfully!");
+      setTeacher(res.data); // Update local state
 
       setTimeout(() => {
         setIsProfileModalOpen(false);
@@ -145,139 +173,56 @@ const StudentDashboard = () => {
     }
   };
 
+  // 🟢 FETCH & OPEN ADMIN CONTACTS
+  const openAdminContacts = async () => {
+    setIsDropdownOpen(false);
+    setIsAdminContactModalOpen(true);
+    setIsAdminsLoading(true);
+    try {
+      const res = await backend.get("/api/admins");
+      setAdminContacts(res.data);
+    } catch (err) {
+      console.error("Failed to load admins", err);
+    } finally {
+      setIsAdminsLoading(false);
+    }
+  };
+
   const openProfileModal = () => {
-    setProfileData({ email: data.profile.email, phone: data.profile.phone });
+    setProfileData({ email: teacher.email, phone: teacher.phone });
     setIsProfileModalOpen(true);
     setIsDropdownOpen(false);
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500 font-bold">
-        Loading your portal...
-      </div>
-    );
-  if (!data)
-    return (
-      <div className="min-h-screen flex items-center justify-center text-red-500 font-bold">
-        Failed to load data. Please log in again.
-      </div>
-    );
-
-  const { profile, schedule, stats } = data;
-
-  if (profile.status === "Graduated") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="bg-white p-10 rounded-3xl shadow-xl max-w-lg w-full border border-gray-100">
-          <FaUserGraduate className="text-6xl text-blue-600 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Congratulations, {profile.name}!
-          </h1>
-          <p className="text-gray-600 mb-6">
-            You have officially graduated from the {profile.department}{" "}
-            department.
-          </p>
-          <p className="text-sm text-gray-400 italic mb-8">
-            Your academic records are permanently sealed and stored in the
-            alumni database.
-          </p>
-          <button
-            onClick={handleLogout}
-            className="px-8 py-3 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-900 transition-all shadow-md"
-          >
-            Log Out
-          </button>
-        </div>
+        Loading Faculty Portal...
       </div>
     );
   }
 
-  //  UPDATED FUNCTION: Now checks for weekends!
-  const checkIsLive = (startTime, endTime) => {
-    // 1. Check if it's Saturday (6) or Sunday (0)
-    const today = new Date().getDay();
-    if (today === 0 || today === 6) return false; 
-
-    // 2. Normal time check
-    const currentStr =
-      currentTime.getHours().toString().padStart(2, "0") +
-      ":" +
-      currentTime.getMinutes().toString().padStart(2, "0");
-    return currentStr >= startTime && currentStr <= endTime;
-  };
-  const getHeaderGradient = (percentage, totalPossible) => {
-    if (totalPossible === 0) return "from-blue-600 to-indigo-700";
-    if (percentage >= 75) return "from-emerald-500 to-teal-600";
-    if (percentage >= 50) return "from-amber-500 to-orange-600";
-    return "from-rose-500 to-red-600";
-  };
-
-  const renderAlertBanner = (percentage, totalPossible) => {
-    if (totalPossible === 0) {
-      return (
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-xl flex items-start gap-3 shadow-sm mb-6">
-          <FaCalendarAlt className="text-xl text-blue-600 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-blue-800">No classes held yet</h3>
-            <p className="text-sm text-blue-700">
-              Your attendance will calculate once classes begin.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    if (percentage >= 75) {
-      return (
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-xl flex items-start gap-3 shadow-sm mb-6">
-          <FaCheckCircle className="text-xl text-green-600 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-green-800">Attendance is on track</h3>
-            <p className="text-sm text-green-700">
-              Great job! Keep attending classes to maintain your good standing.
-            </p>
-          </div>
-        </div>
-      );
-    } else if (percentage >= 50) {
-      return (
-        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl flex items-start gap-3 shadow-sm mb-6">
-          <FaExclamationTriangle className="text-xl text-amber-600 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-amber-800">
-              Warning: Attendance below 75%
-            </h3>
-            <p className="text-sm text-amber-700">
-              Your attendance has dropped to {percentage}%. Please attend
-              upcoming classes to recover your average.
-            </p>
-          </div>
-        </div>
-      );
-    } else {
-      return (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 shadow-sm mb-6">
-          <FaExclamationTriangle className="text-xl text-red-600 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-red-800">
-              CRITICAL: Attendance below 50%
-            </h3>
-            <p className="text-sm text-red-700">
-              It will be mathematically difficult to recover. Please contact
-              your department head immediately.
-            </p>
-          </div>
-        </div>
-      );
-    }
-  };
+  if (!teacher) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-red-500 font-bold gap-4">
+        <p>Authentication Error. Please log in again.</p>
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 bg-red-100 rounded-lg"
+        >
+          Log Out
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
-      {/* 🟢 UPDATED NAVBAR WITH DROPDOWN */}
+      {/* 🚀 NAVBAR WITH DROPDOWN */}
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center mb-6 shadow-sm">
-        <div className="font-bold text-xl text-blue-600">Student Portal</div>
+        <div className="font-bold text-xl text-blue-600 flex items-center gap-2">
+          <FaChalkboardTeacher /> Faculty Portal
+        </div>
 
         <div className="relative">
           <button
@@ -291,9 +236,11 @@ const StudentDashboard = () => {
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 animate-fadeIn">
               <div className="px-4 py-2 border-b border-gray-50 mb-2">
                 <p className="text-sm font-bold text-gray-800 truncate">
-                  {profile.name}
+                  {teacher.name}
                 </p>
-                <p className="text-xs text-gray-500 truncate">{profile.urn}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {teacher.teacherId}
+                </p>
               </div>
 
               <button
@@ -313,6 +260,13 @@ const StudentDashboard = () => {
                 <FaLock /> Change Password
               </button>
 
+              <button
+                onClick={openAdminContacts}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
+              >
+                <FaUserShield /> Contact Admins
+              </button>
+
               <div className="border-t border-gray-100 mt-2 pt-2">
                 <button
                   onClick={handleLogout}
@@ -327,138 +281,144 @@ const StudentDashboard = () => {
       </nav>
 
       <div className="max-w-6xl mx-auto px-6">
-        {renderAlertBanner(stats.overallPercentage, stats.totalPossible)}
-
-        <div
-          className={`bg-gradient-to-r ${getHeaderGradient(stats.overallPercentage, stats.totalPossible)} rounded-3xl p-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6 transition-all duration-500`}
-        >
+        {/* 🎓 WELCOME HEADER */}
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-3xl p-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
           <div>
+            <p className="text-blue-200 text-sm font-bold uppercase tracking-wider mb-1">
+              Faculty Portal
+            </p>
             <h1 className="text-3xl font-bold mb-1">
-              Welcome back, {profile.name}!
+              Welcome, {teacher.name}!
             </h1>
             <p className="text-white/90 flex items-center gap-2">
-              <FaUserGraduate /> URN: {profile.urn} • {profile.department} •{" "}
-              {profile.year} ({profile.semester} Sem)
+              ID: {teacher.teacherId} • {teacher.department} Department
             </p>
           </div>
-          <div className="text-left md:text-right bg-white/20 p-4 rounded-2xl backdrop-blur-sm border border-white/20 shadow-inner">
+          <div className="text-left md:text-right bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/20">
             <div className="text-sm text-white/90 font-bold uppercase tracking-wider mb-1">
-              Overall Attendance
+              Assigned Classes
             </div>
-            <div className="text-5xl font-bold">{stats.overallPercentage}%</div>
+            <div className="text-4xl font-bold">{myClasses.length}</div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* TIMETABLE */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <FaCalendarAlt className="text-blue-500" /> My Master Timetable
-              </h2>
-              {schedule.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {schedule.map((sub, idx) => {
-                    const isLive = checkIsLive(sub.startTime, sub.endTime);
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`relative p-4 rounded-2xl border transition-all duration-300 flex flex-col justify-between min-h-[140px] ${
-                          isLive
-                            ? "bg-white border-blue-400 ring-4 ring-blue-500/10 shadow-md transform scale-[1.02] z-10"
-                            : "bg-gray-50 border-gray-100 hover:shadow-sm hover:border-gray-300"
-                        }`}
-                      >
-                        {isLive && (
-                          <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg rounded-tr-xl animate-pulse shadow-sm">
-                            LIVE NOW
-                          </div>
-                        )}
-
-                        <div>
-                          <h3
-                            className={`font-bold text-lg mb-1 ${isLive ? "text-blue-600" : "text-gray-800"}`}
-                          >
-                            {sub.name}
-                          </h3>
-                          <p className="text-sm text-gray-600 font-bold mb-0.5">
-                            {sub.teacher}
-                          </p>
-
-                          {/* 🟢 NEW: Teacher Phone Number Display */}
-                          <p className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-3">
-                            <FaPhone className="text-[10px]" />{" "}
-                            {sub.teacherPhone || "Contact info hidden"}
-                          </p>
-                        </div>
-
-                        <div
-                          className={`mt-auto w-fit inline-flex items-center gap-1.5 border px-2 py-1 rounded text-xs font-bold ${
-                            isLive
-                              ? "bg-blue-50 border-blue-100 text-blue-700"
-                              : "bg-white border-gray-200 text-gray-600"
-                          }`}
-                        >
-                          <FaClock
-                            className={
-                              isLive ? "text-blue-400" : "text-gray-400"
-                            }
-                          />{" "}
-                          {sub.startTime} - {sub.endTime}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-gray-500 italic py-4">
-                  No classes scheduled yet for this semester.
-                </p>
-              )}
+        {/* ⚡ QUICK ACTIONS */}
+        <h2 className="text-lg font-bold text-gray-800 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          <Link
+            to="/scanner"
+            className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-300 transition-all group flex flex-col items-center text-center cursor-pointer active:scale-95"
+          >
+            <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-2xl mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <FaCamera />
             </div>
-          </div>
+            <h3 className="font-bold text-gray-800 text-lg">Launch Scanner</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Start biometric attendance
+            </p>
+          </Link>
 
-          {/* ATTENDANCE BARS */}
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <FaChartPie className="text-blue-500" /> Attendance Breakdown
-            </h2>
-            <div className="space-y-6">
-              {stats.breakdown.length > 0 ? (
-                stats.breakdown.map((sub, idx) => (
-                  <div key={idx}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-bold text-gray-700">
-                        {sub.name}
-                      </span>
-                      <span className="text-gray-500 font-mono text-xs">
-                        {sub.attended} / {sub.possible} Classes
-                      </span>
+          <Link
+            to="/manual-entry"
+            className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-amber-300 transition-all group flex flex-col items-center text-center cursor-pointer active:scale-[0.98]"
+          >
+            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center text-2xl mb-4 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+              <FaClipboardList />
+            </div>
+            <h3 className="font-bold text-gray-800 text-lg">Manual Entry</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Override or fix records
+            </p>
+          </Link>
+
+          <Link
+            to="/teacher-roster"
+            className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-purple-300 transition-all group flex flex-col items-center text-center cursor-pointer active:scale-[0.98]"
+          >
+            <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center text-2xl mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+              <FaUsers />
+            </div>
+            <h3 className="font-bold text-gray-800 text-lg">Class Roster</h3>
+            <p className="text-xs text-gray-500 mt-1">View enrolled students</p>
+          </Link>
+
+          <Link
+            to="/teacher-reports"
+            className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-emerald-300 transition-all group flex flex-col items-center text-center cursor-pointer active:scale-[0.98]"
+          >
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-2xl mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+              <FaChartBar />
+            </div>
+            <h3 className="font-bold text-gray-800 text-lg">My Reports</h3>
+            <p className="text-xs text-gray-500 mt-1">View class analytics</p>
+          </Link>
+        </div>
+
+        {/* 📅 MY SCHEDULE */}
+        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <FaCalendarAlt className="text-blue-500" /> My Teaching Schedule
+        </h2>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+          {myClasses.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {myClasses.map((sub) => {
+                const isLive = checkIsLive(sub.startTime, sub.endTime);
+                return (
+                  <div
+                    key={sub._id}
+                    className={`relative p-5 rounded-2xl border transition-all duration-300 ${
+                      isLive
+                        ? "bg-white border-blue-400 ring-4 ring-blue-500/10 shadow-md transform scale-[1.02] z-10"
+                        : "bg-gray-50 border-gray-100 hover:shadow-sm"
+                    }`}
+                  >
+                    {isLive && (
+                      <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-xl animate-pulse shadow-sm">
+                        LIVE NOW
+                      </div>
+                    )}
+                    <h3
+                      className={`font-bold text-xl mb-1 ${isLive ? "text-blue-600" : "text-gray-800"}`}
+                    >
+                      {sub.name}
+                    </h3>
+                    <div className="text-sm text-gray-500 font-bold mb-4">
+                      {sub.department} • {sub.year} ({sub.semester} Sem)
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className={`h-2.5 rounded-full ${sub.percentage >= 75 ? "bg-emerald-500" : sub.percentage >= 50 ? "bg-amber-500" : "bg-red-500"}`}
-                        style={{ width: `${sub.percentage}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-right text-[10px] font-bold text-gray-400 mt-1">
-                      {sub.percentage}%
+                    <div
+                      className={`inline-flex items-center gap-2 border px-3 py-1.5 rounded-lg text-sm font-bold ${
+                        isLive
+                          ? "bg-blue-50 border-blue-100 text-blue-700"
+                          : "bg-white border-gray-200 text-gray-600"
+                      }`}
+                    >
+                      <FaClock
+                        className={isLive ? "text-blue-400" : "text-gray-400"}
+                      />
+                      {sub.startTime} - {sub.endTime}
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-gray-500 italic">
-                  No attendance data recorded yet.
-                </p>
-              )}
+                );
+              })}
             </div>
-          </div>
+          ) : (
+            <div className="text-center py-10">
+              <div className="text-gray-400 text-5xl mb-3 flex justify-center">
+                <FaCalendarAlt />
+              </div>
+              <p className="text-gray-500 font-bold">
+                No classes assigned yet.
+              </p>
+              <p className="text-sm text-gray-400">
+                Contact the admin to update your schedule.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ========================================================
-          🟢 CHANGE PASSWORD MODAL 
+          🟢 1. CHANGE PASSWORD MODAL 
           ======================================================== */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
@@ -471,19 +431,7 @@ const StudentDashboard = () => {
               }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 transition-colors"
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <FaTimes size={20} />
             </button>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
@@ -562,7 +510,7 @@ const StudentDashboard = () => {
       )}
 
       {/* ========================================================
-          🟢 UPDATE PROFILE MODAL 
+          🟢 2. UPDATE PROFILE MODAL 
           ======================================================== */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
@@ -575,19 +523,7 @@ const StudentDashboard = () => {
               }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 transition-colors"
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <FaTimes size={20} />
             </button>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
@@ -608,18 +544,18 @@ const StudentDashboard = () => {
                   <input
                     type="text"
                     readOnly
-                    value={profile.name}
+                    value={teacher.name}
                     className="w-full p-2.5 border rounded-xl bg-gray-100 text-gray-500 font-bold outline-none cursor-not-allowed"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
-                    URN
+                    Teacher ID
                   </label>
                   <input
                     type="text"
                     readOnly
-                    value={profile.urn}
+                    value={teacher.teacherId}
                     className="w-full p-2.5 border rounded-xl bg-gray-100 text-gray-500 font-bold outline-none cursor-not-allowed"
                   />
                 </div>
@@ -683,8 +619,80 @@ const StudentDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================
+          🟢 3. CONTACT ADMINS MODAL
+          ======================================================== */}
+      {isAdminContactModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-6 flex justify-between items-center text-white flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <FaUserShield size={24} />
+                <h2 className="text-xl font-bold">System Administrators</h2>
+              </div>
+              <button
+                onClick={() => setIsAdminContactModalOpen(false)}
+                className="bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+              {isAdminsLoading ? (
+                <div className="text-center py-10 text-gray-500 font-bold animate-pulse">
+                  Loading Admin Directory...
+                </div>
+              ) : adminContacts.length > 0 ? (
+                <div className="space-y-4">
+                  {adminContacts.map((admin) => (
+                    <div
+                      key={admin._id}
+                      className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-gray-800 text-lg">
+                          {admin.username || "System Admin"}
+                        </h3>
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 py-1 px-2 rounded-md">
+                          {admin.designation || "Master Admin"}
+                        </span>
+                      </div>
+                      <div className="space-y-2 mt-3">
+                        <a
+                          href={`mailto:${admin.email}`}
+                          className="flex items-center gap-3 text-sm text-gray-600 hover:text-blue-600 transition-colors w-fit"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                            <FaEnvelope />
+                          </div>
+                          {admin.email}
+                        </a>
+                        <a
+                          href={`tel:${admin.phone || ""}`}
+                          className="flex items-center gap-3 text-sm text-gray-600 hover:text-green-600 transition-colors w-fit"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-green-50 text-green-500 flex items-center justify-center">
+                            <FaPhone />
+                          </div>
+                          {admin.phone || "No phone number listed"}
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 text-gray-500 italic">
+                  No administrators found in the directory.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default StudentDashboard;
+export default TeacherDashboard;

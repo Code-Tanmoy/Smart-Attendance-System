@@ -4,15 +4,16 @@ const Subject = require("../models/Subject");
 
 /**
  * 🛡️ HELPER: Check for Teacher Schedule Conflicts
+ * 🟢 UPDATED: Now checks using the unique teacherId instead of the name
  */
 async function checkTeacherConflict(
-  teacherName,
+  teacherId,
   startTime,
   endTime,
   excludeSubjectId = null,
 ) {
   const query = {
-    teacher: teacherName,
+    teacherId: teacherId, // 🟢 FIX: Checking by ID
     $or: [
       { startTime: { $lte: startTime }, endTime: { $gt: startTime } },
       { startTime: { $lt: endTime }, endTime: { $gte: endTime } },
@@ -38,37 +39,48 @@ router.get("/", async (req, res) => {
 
 // POST: Add a new Subject with Conflict Validation
 router.post("/", async (req, res) => {
-  // 🟢 FIX: Extracting ALL fields from the frontend request
-  const { name, teacher, startTime, endTime, department, year, semester } =
-    req.body;
+  // 🟢 FIX: Extracting teacherId from the frontend request
+  const {
+    name,
+    teacher,
+    teacherId,
+    startTime,
+    endTime,
+    department,
+    year,
+    semester,
+  } = req.body;
 
-  // 🟢 FIX: Checking if all hierarchy fields exist
+  // 🟢 FIX: Checking if teacherId exists
   if (
     !name ||
     !teacher ||
+    !teacherId ||
     !startTime ||
     !endTime ||
     !department ||
     !year ||
     !semester
   ) {
-    return res
-      .status(400)
-      .json({ message: "All fields, including Dept and Year, are required" });
+    return res.status(400).json({
+      message: "All fields, including Teacher ID, Dept and Year, are required",
+    });
   }
 
   try {
-    const conflict = await checkTeacherConflict(teacher, startTime, endTime);
+    // 🟢 FIX: Pass teacherId to the conflict checker
+    const conflict = await checkTeacherConflict(teacherId, startTime, endTime);
     if (conflict) {
       return res.status(400).json({
         message: `Scheduling Conflict: ${teacher} is already taking "${conflict.name}" class between ${conflict.startTime} and ${conflict.endTime}.`,
       });
     }
 
-    // 🟢 FIX: Passing ALL fields to the new Subject
+    // 🟢 FIX: Passing teacherId to the database
     const newSubject = new Subject({
       name,
       teacher,
+      teacherId,
       startTime,
       endTime,
       department,
@@ -86,11 +98,13 @@ router.post("/", async (req, res) => {
 
 // PUT: Update/Edit a Subject
 router.put("/:id", async (req, res) => {
-  const { teacher, startTime, endTime } = req.body;
+  // 🟢 FIX: Extract teacherId for edits
+  const { teacher, teacherId, startTime, endTime } = req.body;
 
   try {
+    // 🟢 FIX: Pass teacherId to conflict checker
     const conflict = await checkTeacherConflict(
-      teacher,
+      teacherId,
       startTime,
       endTime,
       req.params.id,
@@ -101,11 +115,10 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // req.body naturally contains department/year/semester from frontend, so this passes through easily
     const updatedSubject = await Subject.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }, // runValidators ensures the edit follows DB rules
+      { new: true, runValidators: true },
     );
     res.json(updatedSubject);
   } catch (err) {
