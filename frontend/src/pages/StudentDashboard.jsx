@@ -12,6 +12,8 @@ import {
   FaUserEdit,
   FaPhone,
   FaEnvelope,
+  FaEye,
+  FaEyeSlash,
 } from "react-icons/fa";
 import { backend } from "../services/api";
 
@@ -32,6 +34,7 @@ const StudentDashboard = () => {
     newPassword: "",
     confirmPassword: "",
   });
+  const [showPasswords, setShowPasswords] = useState(false);
   const [pwdMessage, setPwdMessage] = useState("");
   const [pwdError, setPwdError] = useState("");
   const [isPwdLoading, setIsPwdLoading] = useState(false);
@@ -493,52 +496,82 @@ const StudentDashboard = () => {
                 Change Password
               </h2>
             </div>
-            <form onSubmit={handleChangePassword} className="space-y-4">
+           <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Current Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={pwdData.currentPassword}
-                  onChange={(e) =>
-                    setPwdData({ ...pwdData, currentPassword: e.target.value })
-                  }
-                  className="w-full p-3 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPasswords ? "text" : "password"}
+                    required
+                    value={pwdData.currentPassword}
+                    onChange={(e) =>
+                      setPwdData({ ...pwdData, currentPassword: e.target.value })
+                    }
+                    className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                    className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
+                  >
+                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
               </div>
+              
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   New Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={pwdData.newPassword}
-                  onChange={(e) =>
-                    setPwdData({ ...pwdData, newPassword: e.target.value })
-                  }
-                  className="w-full p-3 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPasswords ? "text" : "password"}
+                    required
+                    value={pwdData.newPassword}
+                    onChange={(e) =>
+                      setPwdData({ ...pwdData, newPassword: e.target.value })
+                    }
+                    className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                    className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
+                  >
+                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
               </div>
+              
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Confirm New Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={pwdData.confirmPassword}
-                  onChange={(e) =>
-                    setPwdData({ ...pwdData, confirmPassword: e.target.value })
-                  }
-                  className="w-full p-3 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPasswords ? "text" : "password"}
+                    required
+                    value={pwdData.confirmPassword}
+                    onChange={(e) =>
+                      setPwdData({ ...pwdData, confirmPassword: e.target.value })
+                    }
+                    className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                    className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
+                  >
+                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
               </div>
+
               {pwdError && (
                 <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm text-center border border-red-100">
                   {pwdError}
@@ -552,7 +585,7 @@ const StudentDashboard = () => {
               <button
                 type="submit"
                 disabled={isPwdLoading}
-                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 disabled:bg-blue-300 transition-colors mt-2"
+                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 disabled:bg-blue-300 transition-colors mt-2 shadow-md"
               >
                 {isPwdLoading ? "Updating..." : "Change Password"}
               </button>

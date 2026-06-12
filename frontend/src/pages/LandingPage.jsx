@@ -33,7 +33,7 @@ const LandingPage = () => {
             <FaCamera className="text-white text-xl" />
           </div>
           <span className="text-xl font-bold tracking-tight">
-            SmartTrack<span className="text-blue-500">.AI</span>
+            SmartTrack<span className="text-blue-500"></span>
           </span>
         </div>
 

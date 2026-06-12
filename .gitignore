@@ -3,6 +3,7 @@ node_modules/
 venv/
 __pycache__/
 *.pyc
+*.pkl
 
 # Environment variables
 .env
@@ -14,3 +15,5 @@ build/
 # IDE files
 .vscode/
 .idea/
+
+python-face-api/faces/
