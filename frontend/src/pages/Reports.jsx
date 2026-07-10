@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -10,8 +9,6 @@ import {
   FaLayerGroup,
   FaChalkboardTeacher,
   FaCalendarAlt,
-  FaCheckCircle,
-  FaTimesCircle,
 } from "react-icons/fa";
 import { backend } from "../services/api";
 import toast from "react-hot-toast";
@@ -25,15 +22,16 @@ const Report = () => {
   // 🛡️ ROLE & VIEW CONTEXT
   const userRole = localStorage.getItem("userRole");
   const teacherId = localStorage.getItem("teacherId");
-  const [viewMode, setViewMode] = useState("Subject"); // "Subject" or "Master"
+  const [viewMode, setViewMode] = useState("Subject");
   const [teacherDept, setTeacherDept] = useState("");
 
-  // Filters
+  // 🔍 GLOBAL FILTERS
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDept, setFilterDept] = useState("All");
   const [filterSemester, setFilterSemester] = useState("All");
   const [filterSubjectId, setFilterSubjectId] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -85,15 +83,26 @@ const Report = () => {
     fetchAllData();
   }, [userRole, teacherId]);
 
+  // 🧹 SMART CLEAR FILTERS
+  const handleClearFilters = () => {
+    if (userRole !== "teacher") {
+      setFilterDept("All");
+    }
+    setFilterSemester("All");
+    setFilterSubjectId("");
+    setSearchTerm("");
+    setStartDate("");
+    setEndDate("");
+  };
+
   // ==========================================
-  // 🧠 ENGINE 1: SUBJECT-SPECIFIC VIEW
+  // 🧠 ENGINE 1: SUBJECT-SPECIFIC VIEW (Aggregated)
   // ==========================================
   const availableSubjects = useMemo(() => {
     return subjects.filter((s) => {
       const matchDept = filterDept === "All" || s.department === filterDept;
       const matchYear =
         filterSemester === "All" || s.semester === filterSemester;
-      // If teacher is in Subject View, only show THEIR subjects
       const matchTeacher =
         userRole === "teacher" ? s.teacherId === teacherId : true;
       return matchDept && matchYear && matchTeacher;
@@ -121,43 +130,26 @@ const Report = () => {
     }
     targetStudents.sort((a, b) => a.name.localeCompare(b.name));
 
-    // MODE B: DAILY VIEW
-    if (filterDate) {
-      return targetStudents.map((student) => {
-        const presentLog = logs.find((log) => {
-          const logDate = new Date(log.recognizedAt)
-            .toISOString()
-            .split("T")[0];
-          const logSubId = log.subjectId?._id || log.subjectId;
-          const isCorrectClass =
-            (logSubId && String(logSubId) === String(selectedSubject._id)) ||
-            log.period === selectedSubject.name;
-          return (
-            log.urn === student.urn && isCorrectClass && logDate === filterDate
-          );
-        });
+    // 🟢 Apply Global Date Range Filter
+    const filteredLogs = logs.filter((log) => {
+      if (!startDate && !endDate) return true;
+      const logDate = new Date(log.recognizedAt).toISOString().split("T")[0];
+      if (startDate && endDate)
+        return logDate >= startDate && logDate <= endDate;
+      if (startDate) return logDate >= startDate;
+      if (endDate) return logDate <= endDate;
+      return true;
+    });
 
-        return {
-          ...student,
-          isPresent: !!presentLog,
-          timePunched: presentLog
-            ? new Date(presentLog.recognizedAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "-",
-        };
-      });
-    }
-
-    // MODE A: OVERALL SUBJECT VIEW
-    const subjectLogs = logs.filter((log) => {
+    // Isolate logs for THIS subject
+    const subjectLogs = filteredLogs.filter((log) => {
       const logSubId = log.subjectId?._id || log.subjectId;
       return (
         (logSubId && String(logSubId) === String(selectedSubject._id)) ||
         log.period === selectedSubject.name
       );
     });
+
     const uniqueDatesHeld = new Set(
       subjectLogs.map(
         (log) => new Date(log.recognizedAt).toISOString().split("T")[0],
@@ -178,7 +170,15 @@ const Report = () => {
             : Math.round((attended / uniqueDatesHeld) * 100),
       };
     });
-  }, [students, logs, selectedSubject, filterDate, searchTerm, viewMode]);
+  }, [
+    students,
+    logs,
+    selectedSubject,
+    searchTerm,
+    viewMode,
+    startDate,
+    endDate,
+  ]);
 
   // ==========================================
   // 🧠 ENGINE 2: MASTER CONSOLIDATED VIEW
@@ -204,11 +204,39 @@ const Report = () => {
           s.urn.toLowerCase().includes(query),
       );
     }
-    targetStudents.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Tiered Sorting
+    const semesterWeights = {
+      "1st": 1,
+      "2nd": 2,
+      "3rd": 3,
+      "4th": 4,
+      "5th": 5,
+      "6th": 6,
+      "7th": 7,
+      "8th": 8,
+    };
+    targetStudents.sort((a, b) => {
+      const semA = semesterWeights[a.semester] || 99;
+      const semB = semesterWeights[b.semester] || 99;
+      if (semA !== semB) return semA - semB;
+      return a.urn.localeCompare(b.urn, undefined, { numeric: true });
+    });
+
+    // 🟢 Apply Global Date Range Filter
+    const filteredLogs = logs.filter((log) => {
+      if (!startDate && !endDate) return true;
+      const logDate = new Date(log.recognizedAt).toISOString().split("T")[0];
+      if (startDate && endDate)
+        return logDate >= startDate && logDate <= endDate;
+      if (startDate) return logDate >= startDate;
+      if (endDate) return logDate <= endDate;
+      return true;
+    });
 
     const subjectStats = {};
     subjects.forEach((sub) => {
-      const subLogs = logs.filter((log) => {
+      const subLogs = filteredLogs.filter((log) => {
         const logSubId = log.subjectId?._id || log.subjectId;
         return (
           (logSubId && String(logSubId) === String(sub._id)) ||
@@ -234,7 +262,7 @@ const Report = () => {
 
       studentSubjects.forEach((sub) => {
         const possible = subjectStats[sub._id] || 0;
-        const attended = logs.filter((log) => {
+        const attended = filteredLogs.filter((log) => {
           const logSubId = log.subjectId?._id || log.subjectId;
           const isCorrectClass =
             (logSubId && String(logSubId) === String(sub._id)) ||
@@ -269,7 +297,31 @@ const Report = () => {
     filterSemester,
     searchTerm,
     viewMode,
+    startDate,
+    endDate,
   ]);
+
+  // 📦 ARCHIVE SEMESTER HANDLER
+  const handleEndSemester = async () => {
+    const isConfirmed = window.confirm(
+      "📦 ARCHIVE SEMESTER \n\nAre you sure you want to officially end this semester?\n\nThis will safely move all current attendance records into the Database Archive for historical keeping, and reset the active dashboard to 0% for the new semester.\n\nClick OK to proceed.",
+    );
+
+    if (isConfirmed) {
+      const archiveToast = toast.loading(
+        "Archiving historical data and resetting dashboard...",
+      );
+      try {
+        const res = await backend.post(
+          "/api/periodwise-attendance/end-semester",
+        );
+        setLogs([]); // Instantly clear the UI to reflect the fresh start
+        toast.success(res.data.message, { id: archiveToast, icon: "📦" });
+      } catch (err) {
+        toast.error("Failed to archive semester.", { id: archiveToast });
+      }
+    }
+  };
 
   // 📥 SMART EXPORT LOGIC
   const handleExportCSV = () => {
@@ -284,45 +336,32 @@ const Report = () => {
     let csvRows = [];
     let filename = "";
 
+    // Add date string for filename
+    const dateStr =
+      startDate || endDate
+        ? `_from_${startDate || "start"}_to_${endDate || "end"}`
+        : "_Overall";
+
     if (viewMode === "Subject") {
-      filename = `${selectedSubject.name}_Report_${filterDate || "Overall"}.csv`;
-      if (filterDate) {
-        headers = [
-          "Name",
-          "URN",
-          "Department",
-          "Date",
-          "Status",
-          "Time Punched",
-        ];
-        csvRows = dataToExport.map((s) => [
-          `"${s.name}"`,
-          `="${s.urn}"`,
-          `"${s.department}"`,
-          filterDate,
-          s.isPresent ? "Present" : "Absent",
-          s.timePunched,
-        ]);
-      } else {
-        headers = [
-          "Name",
-          "URN",
-          "Department",
-          "Classes Held",
-          "Classes Attended",
-          "Percentage (%)",
-        ];
-        csvRows = dataToExport.map((s) => [
-          `"${s.name}"`,
-          `="${s.urn}"`,
-          `"${s.department}"`,
-          s.totalPossible,
-          s.totalAttended,
-          s.percentage,
-        ]);
-      }
+      filename = `${selectedSubject.name}_Report${dateStr}.csv`;
+      headers = [
+        "Name",
+        "URN",
+        "Department",
+        "Classes Held",
+        "Classes Attended",
+        "Percentage (%)",
+      ];
+      csvRows = dataToExport.map((s) => [
+        `"${s.name}"`,
+        `="${s.urn}"`,
+        `"${s.department}"`,
+        s.totalPossible,
+        s.totalAttended,
+        s.percentage,
+      ]);
     } else {
-      filename = `Master_Report_${filterDept}_${filterSemester}.csv`;
+      filename = `Master_Report_${filterDept}_${filterSemester}${dateStr}.csv`;
       headers = [
         "Student Name",
         "URN",
@@ -420,23 +459,50 @@ const Report = () => {
                 : "View combined attendance across all subjects for grading and mentoring."}
             </p>
           </div>
-          <button
-            onClick={handleExportCSV}
-            disabled={
-              (viewMode === "Subject" && !selectedSubject) ||
-              (viewMode === "Master" && masterReportData.length === 0)
-            }
-            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all whitespace-nowrap"
-          >
-            <FaDownload /> Export CSV
-          </button>
+
+          <div className="flex gap-3">
+            {/* 🟢 EXPORT BUTTON */}
+            <button
+              onClick={handleExportCSV}
+              disabled={
+                (viewMode === "Subject" && !selectedSubject) ||
+                (viewMode === "Master" && masterReportData.length === 0)
+              }
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all whitespace-nowrap"
+            >
+              <FaDownload /> Export CSV
+            </button>
+
+            {/* 📦 ADMIN ARCHIVE BUTTON */}
+            {userRole === "admin" && (
+              <button
+                onClick={handleEndSemester}
+                className="bg-red-700 hover:bg-red-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all whitespace-nowrap"
+              >
+                End Semester
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* 🔍 FILTERS BAR */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 space-y-4 w-full">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* DEPARTMENT FILTER (Locked for Teachers) */}
-            <div className="relative w-full lg:w-1/4">
+        {/* 🔍 UNIVERSAL FILTERS BAR */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 space-y-4 w-full relative">
+          {/* Header & Clear Button */}
+          <div className="flex justify-between items-center pb-2 border-b border-gray-50">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+              Report Parameters
+            </h3>
+            <button
+              onClick={handleClearFilters}
+              className="text-[10px] uppercase font-bold text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors border border-gray-200 shadow-sm"
+            >
+              ✕ Clear All Filters
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* DEPARTMENT FILTER */}
+            <div className="relative w-full">
               <FaFilter className="absolute left-3 top-3.5 text-gray-400 text-sm" />
               <select
                 value={filterDept}
@@ -458,7 +524,7 @@ const Report = () => {
             </div>
 
             {/* SEMESTER FILTER */}
-            <div className="relative w-full lg:w-1/4">
+            <div className="relative w-full">
               <FaLayerGroup className="absolute left-3 top-3.5 text-gray-400 text-sm" />
               <select
                 value={filterSemester}
@@ -480,7 +546,7 @@ const Report = () => {
             </div>
 
             {/* SEARCH */}
-            <div className="relative w-full lg:w-2/4">
+            <div className="relative w-full xl:col-span-2">
               <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
               <input
                 type="text"
@@ -492,17 +558,17 @@ const Report = () => {
             </div>
           </div>
 
-          {/* SECONDARY FILTERS (Only visible in Subject Mode) */}
-          {viewMode === "Subject" && (
-            <div className="flex flex-col lg:flex-row gap-4 border-t border-gray-100 pt-4">
-              <div className="relative flex-grow w-full">
+          {/* SECONDARY ROW: Subject & Dates */}
+          <div className="flex flex-col lg:flex-row gap-4 pt-2">
+            {viewMode === "Subject" && (
+              <div className="relative w-full lg:w-1/3">
                 <FaChalkboardTeacher className="absolute left-3 top-3.5 text-blue-500" />
                 <select
                   value={filterSubjectId}
                   onChange={(e) => setFilterSubjectId(e.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold outline-none text-blue-800 focus:ring-2 focus:ring-blue-600 truncate"
                 >
-                  <option value="">-- Select Your Subject --</option>
+                  <option value="">-- Select Subject --</option>
                   {availableSubjects.map((sub) => (
                     <option key={sub._id} value={sub._id}>
                       {sub.name} ({sub.department} - {sub.semester})
@@ -510,32 +576,30 @@ const Report = () => {
                   ))}
                 </select>
               </div>
+            )}
 
-              <div className="relative w-full lg:w-auto flex items-center gap-3">
-                <span className="text-xs font-bold text-gray-400 uppercase whitespace-nowrap">
-                  Daily View:
-                </span>
-                <input
-                  type="date"
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.target.value)}
-                  className={`px-4 py-2.5 rounded-xl text-sm font-bold outline-none transition-colors ${
-                    filterDate
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                      : "bg-gray-50 border-gray-200 text-gray-500"
-                  }`}
-                />
-                {filterDate && (
-                  <button
-                    onClick={() => setFilterDate("")}
-                    className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-600 px-3 py-2.5 rounded-lg font-bold whitespace-nowrap"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
+            {/* GLOBAL DATE RANGE */}
+            <div
+              className={`flex items-center gap-3 w-full ${viewMode === "Subject" ? "lg:w-2/3 justify-end" : "justify-start"}`}
+            >
+              <span className="text-xs font-bold text-gray-400 flex items-center gap-1.5 whitespace-nowrap">
+                <FaCalendarAlt /> Date Range:
+              </span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-3 py-2 rounded-xl text-sm font-medium outline-none border border-gray-200 bg-gray-50 text-gray-700 focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+              />
+              <span className="text-gray-400 font-bold text-sm">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-3 py-2 rounded-xl text-sm font-medium outline-none border border-gray-200 bg-gray-50 text-gray-700 focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+              />
             </div>
-          )}
+          </div>
         </div>
 
         {/* 📊 DYNAMIC TABLE RENDERING */}
@@ -548,26 +612,16 @@ const Report = () => {
                   <tr>
                     <th className="px-6 py-4">Student</th>
                     <th className="px-6 py-4">URN</th>
-                    {!filterDate ? (
-                      <>
-                        <th className="px-6 py-4 text-center">Classes Held</th>
-                        <th className="px-6 py-4 text-center">Attended</th>
-                        <th className="px-6 py-4 text-center">Subject %</th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="px-6 py-4 text-center">Date</th>
-                        <th className="px-6 py-4 text-center">Time Punched</th>
-                        <th className="px-6 py-4 text-center">Status</th>
-                      </>
-                    )}
+                    <th className="px-6 py-4 text-center">Classes Held</th>
+                    <th className="px-6 py-4 text-center">Attended</th>
+                    <th className="px-6 py-4 text-center">Subject %</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {loading ? (
                     <tr>
                       <td
-                        colSpan="6"
+                        colSpan="5"
                         className="text-center py-10 text-gray-400"
                       >
                         Loading records...
@@ -575,11 +629,10 @@ const Report = () => {
                     </tr>
                   ) : !selectedSubject ? (
                     <tr>
-                      <td colSpan="6" className="text-center py-20">
+                      <td colSpan="5" className="text-center py-20">
                         <FaChalkboardTeacher className="mx-auto text-4xl text-gray-300 mb-3" />
                         <p className="text-gray-500 font-medium">
-                          Please select a subject from the dropdown to view
-                          attendance.
+                          Please select a subject from the dropdown.
                         </p>
                       </td>
                     </tr>
@@ -595,49 +648,25 @@ const Report = () => {
                         <td className="px-6 py-4 text-gray-500 font-mono text-xs">
                           {student.urn}
                         </td>
-                        {!filterDate ? (
-                          <>
-                            <td className="px-6 py-4 text-center text-gray-500">
-                              {student.totalPossible}
-                            </td>
-                            <td className="px-6 py-4 text-center font-bold text-gray-800">
-                              {student.totalAttended}
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span
-                                className={`px-3 py-1 rounded-full text-xs font-bold ${student.percentage >= 75 ? "bg-green-100 text-green-700" : student.percentage >= 50 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}
-                              >
-                                {student.percentage}%
-                              </span>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-6 py-4 text-center font-medium text-gray-600 whitespace-nowrap">
-                              {filterDate}
-                            </td>
-                            <td className="px-6 py-4 text-center font-mono text-xs text-gray-500">
-                              {student.timePunched}
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              {student.isPresent ? (
-                                <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full font-bold text-xs whitespace-nowrap">
-                                  <FaCheckCircle /> Present
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-3 py-1 rounded-full font-bold text-xs whitespace-nowrap">
-                                  <FaTimesCircle /> Absent
-                                </span>
-                              )}
-                            </td>
-                          </>
-                        )}
+                        <td className="px-6 py-4 text-center text-gray-500">
+                          {student.totalPossible}
+                        </td>
+                        <td className="px-6 py-4 text-center font-bold text-gray-800">
+                          {student.totalAttended}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold ${student.percentage >= 75 ? "bg-green-100 text-green-700" : student.percentage >= 50 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}
+                          >
+                            {student.percentage}%
+                          </span>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
                       <td
-                        colSpan="6"
+                        colSpan="5"
                         className="text-center py-10 text-gray-400 italic"
                       >
                         No students found.

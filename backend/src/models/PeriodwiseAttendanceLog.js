@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const periodwiseAttendanceLogSchema = new mongoose.Schema({
   urn: String,
@@ -8,4 +8,7 @@ const periodwiseAttendanceLogSchema = new mongoose.Schema({
   recognizedAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('PeriodwiseAttendanceLog', periodwiseAttendanceLogSchema);
+module.exports = mongoose.model(
+  "PeriodwiseAttendanceLog",
+  periodwiseAttendanceLogSchema,
+);

@@ -3,7 +3,14 @@ const mongoose = require("mongoose");
 const SubjectSchema = new mongoose.Schema({
   name: { type: String, required: true },
   teacher: { type: String, required: true },
-  teacherId: { type: String, required: true }, //  Connects the class to a specific Teacher
+  teacherId: { type: String, required: true },
+  day: {
+    // 🟢 UPDATED: Now an array of strings to support multiple days
+    type: [String],
+    required: true,
+    // The enum ensures every item in the array is a valid weekday
+    enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+  },
   startTime: { type: String, required: true },
   endTime: { type: String, required: true },
 

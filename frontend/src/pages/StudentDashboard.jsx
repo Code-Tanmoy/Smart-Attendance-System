@@ -24,7 +24,7 @@ const StudentDashboard = () => {
   // Force a re-render every minute so the "Live Now" badge updates automatically
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 🟢 SETTINGS DROPDOWN & MODAL STATES
+  //  SETTINGS DROPDOWN & MODAL STATES
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Password State
@@ -196,18 +196,33 @@ const StudentDashboard = () => {
     );
   }
 
-  //  UPDATED FUNCTION: Now checks for weekends!
-  const checkIsLive = (startTime, endTime) => {
-    // 1. Check if it's Saturday (6) or Sunday (0)
+  // 🟢 UPDATED FUNCTION: Now checks the actual days the class runs!
+  const checkIsLive = (subject) => {
     const today = new Date().getDay();
-    if (today === 0 || today === 6) return false; 
+    if (today === 0 || today === 6) return false;
 
-    // 2. Normal time check
+    const daysOfWeek = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const todayName = daysOfWeek[today];
+
+    const activeDays = Array.isArray(subject.day)
+      ? subject.day
+      : [subject.day].filter(Boolean);
+
+    if (!activeDays.includes(todayName)) return false;
+
     const currentStr =
       currentTime.getHours().toString().padStart(2, "0") +
       ":" +
       currentTime.getMinutes().toString().padStart(2, "0");
-    return currentStr >= startTime && currentStr <= endTime;
+    return currentStr >= subject.startTime && currentStr <= subject.endTime;
   };
   const getHeaderGradient = (percentage, totalPossible) => {
     if (totalPossible === 0) return "from-blue-600 to-indigo-700";
@@ -362,7 +377,16 @@ const StudentDashboard = () => {
               {schedule.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {schedule.map((sub, idx) => {
-                    const isLive = checkIsLive(sub.startTime, sub.endTime);
+                    // 🟢 Pass the whole subject
+                    const isLive = checkIsLive(sub);
+
+                    // 🟢 Format the days string
+                    const activeDays = Array.isArray(sub.day)
+                      ? sub.day
+                      : [sub.day].filter(Boolean);
+                    const daysString = activeDays
+                      .map((d) => d.slice(0, 3).toUpperCase())
+                      .join(", ");
 
                     return (
                       <div
@@ -389,11 +413,15 @@ const StudentDashboard = () => {
                             {sub.teacher}
                           </p>
 
-                          {/* 🟢 NEW: Teacher Phone Number Display */}
-                          <p className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-3">
+                          <p className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-2">
                             <FaPhone className="text-[10px]" />{" "}
                             {sub.teacherPhone || "Contact info hidden"}
                           </p>
+                        </div>
+
+                        {/* 🟢 NEW: Days displayed here */}
+                        <div className="text-xs text-blue-500 font-bold mb-3 uppercase tracking-wider">
+                          📅 {daysString}
                         </div>
 
                         <div
@@ -496,7 +524,7 @@ const StudentDashboard = () => {
                 Change Password
               </h2>
             </div>
-           <form onSubmit={handleChangePassword} className="space-y-4">
+            <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Current Password
@@ -507,7 +535,10 @@ const StudentDashboard = () => {
                     required
                     value={pwdData.currentPassword}
                     onChange={(e) =>
-                      setPwdData({ ...pwdData, currentPassword: e.target.value })
+                      setPwdData({
+                        ...pwdData,
+                        currentPassword: e.target.value,
+                      })
                     }
                     className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="••••••••"
@@ -517,11 +548,15 @@ const StudentDashboard = () => {
                     onClick={() => setShowPasswords(!showPasswords)}
                     className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                    {showPasswords ? (
+                      <FaEyeSlash size={18} />
+                    ) : (
+                      <FaEye size={18} />
+                    )}
                   </button>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   New Password
@@ -542,11 +577,15 @@ const StudentDashboard = () => {
                     onClick={() => setShowPasswords(!showPasswords)}
                     className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                    {showPasswords ? (
+                      <FaEyeSlash size={18} />
+                    ) : (
+                      <FaEye size={18} />
+                    )}
                   </button>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Confirm New Password
@@ -557,7 +596,10 @@ const StudentDashboard = () => {
                     required
                     value={pwdData.confirmPassword}
                     onChange={(e) =>
-                      setPwdData({ ...pwdData, confirmPassword: e.target.value })
+                      setPwdData({
+                        ...pwdData,
+                        confirmPassword: e.target.value,
+                      })
                     }
                     className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="••••••••"
@@ -567,7 +609,11 @@ const StudentDashboard = () => {
                     onClick={() => setShowPasswords(!showPasswords)}
                     className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                    {showPasswords ? (
+                      <FaEyeSlash size={18} />
+                    ) : (
+                      <FaEye size={18} />
+                    )}
                   </button>
                 </div>
               </div>

@@ -26,7 +26,7 @@ function App() {
       <Toaster
         position="top-center"
         toastOptions={{
-          style: { zIndex: 99999 }, // Forces it to the very front
+          style: { zIndex: 99999 }, 
         }}
       />
       <Routes>

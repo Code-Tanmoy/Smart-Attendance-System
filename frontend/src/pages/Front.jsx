@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { backend, faceApi } from "../services/api";
-import toast from "react-hot-toast"; // 🟢 NEW: Imported Toast
+import toast from "react-hot-toast";
 import {
   FaCheckCircle,
   FaExclamationTriangle,
@@ -68,6 +68,18 @@ const Front = () => {
 
         let liveClass = undefined;
 
+        // 🟢 NEW: Map JS day index (0-6) to string names matching your DB
+        const daysOfWeek = [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+        ];
+        const todayName = daysOfWeek[today];
+
         // ONLY search for a live class if it's NOT Sunday (0) and NOT Saturday (6)
         if (today !== 0 && today !== 6) {
           const currentStr =
@@ -75,9 +87,17 @@ const Front = () => {
             ":" +
             now.getMinutes().toString().padStart(2, "0");
 
-          liveClass = teacherClasses.find(
-            (sub) => currentStr >= sub.startTime && currentStr <= sub.endTime,
-          );
+          liveClass = teacherClasses.find((sub) => {
+            // Safely handle both new array format and old string format
+            const activeDays = Array.isArray(sub.day) ? sub.day : [sub.day];
+
+            // 🟢 UPDATED: Now requires the day to match AND the time to match
+            return (
+              activeDays.includes(todayName) &&
+              currentStr >= sub.startTime &&
+              currentStr <= sub.endTime
+            );
+          });
         }
 
         if (liveClass) {
@@ -226,8 +246,8 @@ const Front = () => {
 
   const currentSubject = mySubjects.find((s) => s._id === selectedSubjectId);
 
-  // Renders a Holiday badge on weekends
-  const getSubjectStatus = (startTime, endTime) => {
+  // Renders a Holiday badge on weekends, or the scheduled days if not today
+  const getSubjectStatus = (subject) => {
     const now = new Date();
     const today = now.getDay();
 
@@ -239,21 +259,47 @@ const Front = () => {
       };
     }
 
+    const daysOfWeek = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const todayName = daysOfWeek[today];
+    const activeDays = Array.isArray(subject.day) ? subject.day : [subject.day];
+
+    // 🟢 NEW: If it's not today, show the actual days it is scheduled!
+    if (!activeDays.includes(todayName)) {
+      // Formats ["Monday", "Wednesday"] into "MON, WED"
+      const formattedDays = activeDays
+        .map((d) => d.slice(0, 3).toUpperCase())
+        .join(", ");
+
+      return {
+        text: `📅 ${formattedDays}`,
+        color: "text-slate-500 bg-slate-900/50 border-slate-800",
+      };
+    }
+
     const currentStr =
       now.getHours().toString().padStart(2, "0") +
       ":" +
       now.getMinutes().toString().padStart(2, "0");
 
-    if (currentStr < startTime)
+    if (currentStr < subject.startTime)
       return {
         text: "⏳ UPCOMING",
         color: "text-amber-400 bg-amber-950/40 border-amber-900/50",
       };
-    if (currentStr > endTime)
+    if (currentStr > subject.endTime)
       return {
         text: "🔴 ENDED",
         color: "text-rose-400 bg-rose-950/40 border-rose-900/50",
       };
+
     return {
       text: "🟢 LIVE NOW",
       color:
@@ -368,14 +414,9 @@ const Front = () => {
                 </div>
 
                 <div
-                  className={`px-3 py-1.5 border rounded-lg text-xs font-bold tracking-wide ${getSubjectStatus(currentSubject.startTime, currentSubject.endTime).color}`}
+                  className={`px-3 py-1.5 border rounded-lg text-xs font-bold tracking-wide ${getSubjectStatus(currentSubject).color}`}
                 >
-                  {
-                    getSubjectStatus(
-                      currentSubject.startTime,
-                      currentSubject.endTime,
-                    ).text
-                  }
+                  {getSubjectStatus(currentSubject).text}
                 </div>
               </div>
             )}

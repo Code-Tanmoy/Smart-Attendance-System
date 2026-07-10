@@ -10,7 +10,7 @@ const cron = require("node-cron");
 const Student = require("../models/Student");
 const PeriodwiseAttendanceLog = require("../models/PeriodwiseAttendanceLog");
 const Subject = require("../models/Subject");
-const Teacher = require("../models/Teacher"); // 🟢 NEW: Imported Teacher model for phone number lookup
+const Teacher = require("../models/Teacher");
 const auth = require("../middleware/auth");
 
 // ==========================================
@@ -541,6 +541,7 @@ router.get("/me/:urn", auth, async (req, res) => {
           teacherPhone: teacherPhone,
           startTime: sub.startTime,
           endTime: sub.endTime,
+          day: sub.day,
           possible,
           attended,
           percentage:

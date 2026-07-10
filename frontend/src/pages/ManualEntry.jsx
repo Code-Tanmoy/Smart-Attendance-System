@@ -15,7 +15,7 @@ const ManualEntry = () => {
   const [mySubjects, setMySubjects] = useState([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [urn, setUrn] = useState("");
-  const [manualDate, setManualDate] = useState(""); 
+  const [manualDate, setManualDate] = useState("");
 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -42,15 +42,34 @@ const ManualEntry = () => {
       teacherClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
       setMySubjects(teacherClasses);
 
-      // Auto-select LIVE class
+      // Auto-select LIVE class (🟢 UPDATED for Multi-Day)
       const now = new Date();
+      const daysOfWeek = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+      const todayName = daysOfWeek[now.getDay()];
+
       const currentStr =
         now.getHours().toString().padStart(2, "0") +
         ":" +
         now.getMinutes().toString().padStart(2, "0");
-      const liveClass = teacherClasses.find(
-        (sub) => currentStr >= sub.startTime && currentStr <= sub.endTime,
-      );
+
+      const liveClass = teacherClasses.find((sub) => {
+        const activeDays = Array.isArray(sub.day)
+          ? sub.day
+          : [sub.day].filter(Boolean);
+        return (
+          activeDays.includes(todayName) &&
+          currentStr >= sub.startTime &&
+          currentStr <= sub.endTime
+        );
+      });
       if (liveClass && !selectedSubjectId) setSelectedSubjectId(liveClass._id);
 
       // 2. Fetch and filter Logs for this teacher's classes ONLY (Today's logs)
@@ -93,6 +112,33 @@ const ManualEntry = () => {
 
     if (selectedSub) {
       const dateToUse = manualDate || new Date().toISOString().split("T")[0];
+
+      // 🟢 NEW: Check if the selected date matches the class schedule
+      const [year, month, day] = dateToUse.split("-");
+      const selectedDateObj = new Date(year, month - 1, day);
+      const daysOfWeek = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+      const selectedDayName = daysOfWeek[selectedDateObj.getDay()];
+
+      const activeDays = Array.isArray(selectedSub.day)
+        ? selectedSub.day
+        : [selectedSub.day].filter(Boolean);
+
+      if (activeDays.length > 0 && !activeDays.includes(selectedDayName)) {
+        setMessage({
+          text: `Error: ${selectedSub.name} does not run on a ${selectedDayName}. Scheduled days: ${activeDays.join(", ")}`,
+          type: "error",
+        });
+        return;
+      }
+
       recognizedTimestamp = new Date(
         `${dateToUse}T${selectedSub.startTime}:00`,
       );
@@ -113,7 +159,7 @@ const ManualEntry = () => {
       const res = await backend.post("/api/periodwise-attendance", {
         urn: urn.trim(),
         subjectId: selectedSubjectId,
-        recognizedAt: recognizedTimestamp.toISOString(), 
+        recognizedAt: recognizedTimestamp.toISOString(),
       });
 
       setMessage({
@@ -139,19 +185,18 @@ const ManualEntry = () => {
   // 🟢 NEW: Filter logs based on the selected subject in the form
   const displayedLogs = useMemo(() => {
     if (!selectedSubjectId) return logs; // If no class selected, show all
-    
+
     // Find the name of the currently selected subject to filter the logs
     const subjectName = currentSubject?.name;
-    
-    return logs.filter(log => log.period === subjectName);
-  }, [logs, selectedSubjectId, currentSubject]);
 
+    return logs.filter((log) => log.period === subjectName);
+  }, [logs, selectedSubjectId, currentSubject]);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center mb-6 shadow-sm">
         <div className="font-bold text-xl text-blue-600 flex items-center gap-2">
-         Teacher's Dashboard
+          Teacher's Dashboard
         </div>
         <Link
           to="/teacherdashboard"
@@ -187,11 +232,22 @@ const ManualEntry = () => {
                     className="w-full mt-1 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 font-bold text-sm"
                   >
                     <option value="">-- Select Class --</option>
-                    {mySubjects.map((sub) => (
-                      <option key={sub._id} value={sub._id}>
-                        {sub.name} ({sub.startTime})
-                      </option>
-                    ))}
+                    {mySubjects.map((sub) => {
+                      // 🟢 NEW: Format days for the dropdown
+                      const activeDays = Array.isArray(sub.day)
+                        ? sub.day
+                        : [sub.day].filter(Boolean);
+                      const daysString = activeDays
+                        .map((d) => d.slice(0, 3).toUpperCase())
+                        .join(", ");
+
+                      return (
+                        <option key={sub._id} value={sub._id}>
+                          {sub.name} ({sub.startTime}){" "}
+                          {daysString && `[${daysString}]`}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -272,7 +328,7 @@ const ManualEntry = () => {
                 <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                   <FaHistory className="text-blue-500" /> Today's Logbook
                 </h2>
-                
+
                 {/* 🟢 NEW: Visual indicator of what is being filtered */}
                 {currentSubject && (
                   <div className="text-[10px] font-bold uppercase tracking-wide bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full flex items-center gap-1 border border-blue-100">
@@ -325,8 +381,8 @@ const ManualEntry = () => {
                           colSpan="4"
                           className="text-center py-10 text-gray-400 italic"
                         >
-                          {selectedSubjectId 
-                            ? `No attendance recorded for ${currentSubject?.name} today.` 
+                          {selectedSubjectId
+                            ? `No attendance recorded for ${currentSubject?.name} today.`
                             : "No attendance recorded for your classes today."}
                         </td>
                       </tr>

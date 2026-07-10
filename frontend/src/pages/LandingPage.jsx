@@ -154,7 +154,7 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">
-              Enterprise-Grade Architecture
+               Architecture
             </h2>
             <p className="text-gray-400 max-w-2xl mx-auto">
               Built with modern frameworks to ensure speed, accuracy, and

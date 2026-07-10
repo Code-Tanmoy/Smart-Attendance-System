@@ -10,7 +10,7 @@ import {
   FaIdBadge,
 } from "react-icons/fa";
 import { backend, faceApi } from "../services/api";
-import toast from "react-hot-toast"; // 🟢 NEW: Imported React Hot Toast
+import toast from "react-hot-toast"; 
 
 const Addstudent = () => {
   const videoRef = useRef(null);

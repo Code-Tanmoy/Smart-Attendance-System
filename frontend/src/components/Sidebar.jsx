@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   FaHome,
@@ -15,18 +15,17 @@ import {
   FaCog,
   FaEye,
   FaEyeSlash,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { backend, faceApi } from "../services/api";
-import toast from "react-hot-toast"; // 🟢 NEW: Imported React Hot Toast
+import toast from "react-hot-toast";
 
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 🟢 Retrieve Admin Name from LocalStorage (Fallback to "Admin" if not found)
   const adminName = localStorage.getItem("adminName") || "Admin";
 
-  // 🟢 SETTINGS / CHANGE PASSWORD STATES
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pwdData, setPwdData] = useState({
     currentPassword: "",
@@ -35,6 +34,29 @@ const Sidebar = () => {
   });
   const [showPasswords, setShowPasswords] = useState(false);
   const [isSettingsLoading, setIsSettingsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // 🟢 REAL-TIME DATE & TIME ENGINE
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    // Updates every 1 second so it stays perfectly accurate
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formattedDay = currentTime.toLocaleDateString("en-US", {
+    weekday: "long",
+  });
+  const formattedDate = currentTime.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const formattedTime = currentTime.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const getLinkClass = (path) => {
     const baseClass =
@@ -57,12 +79,8 @@ const Sidebar = () => {
     }
   };
 
-  const [isSyncing, setIsSyncing] = useState(false);
-
-  // 🟢 NEW: Upgraded AI Database Sync to use toast.promise
   const handleSyncFaces = async () => {
     setIsSyncing(true);
-
     const syncPromise = faceApi.post("/sync");
 
     toast.promise(syncPromise, {
@@ -80,7 +98,6 @@ const Sidebar = () => {
     }
   };
 
-  // 🟢 NEW: Upgraded Email Warning Engine to use toast.promise
   const testEmailEngine = async () => {
     const emailPromise = backend.post("/api/students/trigger-warnings");
 
@@ -92,7 +109,6 @@ const Sidebar = () => {
     });
   };
 
-  // 🟢 CHANGE PASSWORD HANDLER (Upgraded to use Toasts)
   const handleChangePassword = async (e) => {
     e.preventDefault();
 
@@ -115,7 +131,6 @@ const Sidebar = () => {
       toast.success(res.data.message, { id: pwdToast });
       setPwdData({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
-      // Automatically close the modal after 1.5 seconds on success
       setTimeout(() => {
         setIsSettingsOpen(false);
       }, 1500);
@@ -133,7 +148,7 @@ const Sidebar = () => {
       <div className="w-full lg:w-64 bg-white shadow-xl rounded-3xl p-5 flex flex-col justify-between min-h-[90vh] border border-gray-100">
         <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar pr-2">
           {/* Personalized Welcome Header */}
-          <div className="flex items-center gap-3 mb-8 mt-2 px-2">
+          <div className="flex items-center gap-3 mb-5 mt-2 px-2">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0">
               <FaShieldAlt size={20} />
             </div>
@@ -145,6 +160,22 @@ const Sidebar = () => {
                 {adminName}
               </p>
             </div>
+          </div>
+
+          {/* 🟢 NEW: REAL-TIME DATE WIDGET */}
+          <div className="mx-2 mb-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100/50 flex flex-col gap-1 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                <FaCalendarAlt className="mb-0.5 text-blue-500" />{" "}
+                {formattedDay}
+              </p>
+              <p className="text-[10px] font-bold text-gray-500 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100 flex items-center gap-1.5">
+                <FaClock className="text-gray-400" /> {formattedTime}
+              </p>
+            </div>
+            <p className="text-sm font-bold text-gray-800 tracking-tight mt-1">
+              {formattedDate}
+            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -250,7 +281,7 @@ const Sidebar = () => {
               onClick={testEmailEngine}
               className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors border border-red-100"
             >
-              <span className="text-lg">🚨</span> Test Email Engine
+              <span className="text-lg"></span> Send Warning
             </button>
             <button
               onClick={handleSyncFaces}
@@ -327,7 +358,7 @@ const Sidebar = () => {
               </h2>
             </div>
 
-           <form onSubmit={handleChangePassword} className="space-y-4">
+            <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Current Password
@@ -338,7 +369,10 @@ const Sidebar = () => {
                     required
                     value={pwdData.currentPassword}
                     onChange={(e) =>
-                      setPwdData({ ...pwdData, currentPassword: e.target.value })
+                      setPwdData({
+                        ...pwdData,
+                        currentPassword: e.target.value,
+                      })
                     }
                     className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="••••••••"
@@ -348,11 +382,15 @@ const Sidebar = () => {
                     onClick={() => setShowPasswords(!showPasswords)}
                     className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                    {showPasswords ? (
+                      <FaEyeSlash size={18} />
+                    ) : (
+                      <FaEye size={18} />
+                    )}
                   </button>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   New Password
@@ -373,11 +411,15 @@ const Sidebar = () => {
                     onClick={() => setShowPasswords(!showPasswords)}
                     className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                    {showPasswords ? (
+                      <FaEyeSlash size={18} />
+                    ) : (
+                      <FaEye size={18} />
+                    )}
                   </button>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Confirm New Password
@@ -388,7 +430,10 @@ const Sidebar = () => {
                     required
                     value={pwdData.confirmPassword}
                     onChange={(e) =>
-                      setPwdData({ ...pwdData, confirmPassword: e.target.value })
+                      setPwdData({
+                        ...pwdData,
+                        confirmPassword: e.target.value,
+                      })
                     }
                     className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="••••••••"
@@ -398,12 +443,15 @@ const Sidebar = () => {
                     onClick={() => setShowPasswords(!showPasswords)}
                     className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
                   >
-                    {showPasswords ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                    {showPasswords ? (
+                      <FaEyeSlash size={18} />
+                    ) : (
+                      <FaEye size={18} />
+                    )}
                   </button>
                 </div>
               </div>
 
-            
               <button
                 type="submit"
                 disabled={isSettingsLoading}

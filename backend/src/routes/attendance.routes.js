@@ -68,7 +68,7 @@ router.post("/", async (req, res) => {
     // Find a subject that runs on this Day AND covers this Time
     // We compare strings: "09:00" <= "09:15" <= "09:50"
     const activeSubject = await Subject.findOne({
-      days: dayName,
+      day: dayName,
       startTime: { $lte: timeString },
       endTime: { $gte: timeString },
     });

@@ -1,37 +1,57 @@
+  
+##################################################
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import cv2
 import numpy as np
-import os
 import base64
-import shutil
-import uuid  # To generate unique filenames
 from deepface import DeepFace
+from pymongo import MongoClient
+from scipy.spatial.distance import cosine
+import os
+from dotenv import load_dotenv
+
 
 app = Flask(__name__)
+load_dotenv()
 CORS(app)
 
 # ======================================================
-# CONFIGURATION
+# MONGODB CONFIGURATION 
 # ======================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FACES_DIR = os.path.join(BASE_DIR, "faces")
-os.makedirs(FACES_DIR, exist_ok=True)
 
-# 🟢 NEW HELPER: Dynamically clears ANY DeepFace cache file
-def clear_cache():
-    try:
-        for filename in os.listdir(FACES_DIR):
-            if filename.endswith(".pkl"):
-                file_path = os.path.join(FACES_DIR, filename)
-                os.remove(file_path)
-                print(f"🗑️ Cleared AI Cache: {filename}")
-    except Exception as e:
-        print(f"Error clearing cache: {e}")
+# db string
+MONGO_URI = os.getenv("MONGO_URI")
 
-# Delete cache on startup to force a refresh of the model
-clear_cache()
+
+client = MongoClient(MONGO_URI)
+db = client.get_default_database()
+students_collection = db['students'] 
+
+
+known_embeddings = {}
+
+def load_embeddings_from_db():
+    """Loads all student embeddings from MongoDB into RAM on startup/sync."""
+    global known_embeddings
+    known_embeddings.clear()
+    print("🔄 Syncing embeddings from MongoDB...")
+    
+    # Find all students that actually have the 'embedding' array field
+    students = students_collection.find({"embedding": {"$exists": True}})
+    count = 0
+    for student in students:
+        urn = student.get("urn")
+        embedding = student.get("embedding")
+        if urn and embedding:
+            known_embeddings[urn] = np.array(embedding)
+            count += 1
+            
+    print(f"✅ Loaded {count} faces into memory.")
+
+# Load embeddings immediately when the server starts
+load_embeddings_from_db()
 
 def decode_image(image_data):
     """Convert Base64 string to OpenCV Image."""
@@ -46,7 +66,7 @@ def decode_image(image_data):
         return None
 
 # ======================================================
-# ROUTE: ENROLL (Saves to faces folder)
+# ROUTE: ENROLL (Extracts Math, Saves to MongoDB)
 # ======================================================
 @app.route('/enroll', methods=['POST'])
 def enroll():
@@ -58,51 +78,38 @@ def enroll():
         if not urn or not image_data:
             return jsonify({"message": "Missing URN or Image"}), 400
 
-        # Decode base64 image
-        encoded_data = image_data.split(',')[1]
-        nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        img = decode_image(image_data)
+        if img is None:
+            return jsonify({"message": "Invalid Image Data"}), 400
 
-        # Save temporarily for checking
-        temp_path = f"temp_{urn}.jpg"
-        cv2.imwrite(temp_path, img)
-
-        # 🛡️ SECURITY CHECK: Does this face already exist?
+        # 1. Extract the Mathematical Embedding (No file saving!)
         try:
-            results = DeepFace.find(img_path=temp_path, db_path="faces", enforce_detection=True, silent=True)
-            
-            if len(results) > 0 and not results[0].empty:
-                os.remove(temp_path) # Clean up temp file
-                return jsonify({
-                    "message": "Biometric Conflict: This face is already registered"
-                }), 403
-                
-        except ValueError:
-            pass # Empty DB, perfectly fine for the first student
+            results = DeepFace.represent(
+                img_path=img, 
+                model_name="GhostFaceNet", 
+                enforce_detection=True
+            )
+            embedding = results[0]["embedding"]
         except Exception as e:
-            pass
+            return jsonify({"message": "No face detected. Please ensure good lighting and look at the camera."}), 400
 
-        # Create a dedicated folder for this URN
-        person_dir = os.path.join(FACES_DIR, urn)
-        os.makedirs(person_dir, exist_ok=True)
-        
-        # Save the image inside their specific folder
-        final_path = os.path.join(person_dir, f"{urn}.jpg")
-        cv2.imwrite(final_path, img)
-        os.remove(temp_path) # Clean up temp file
-        
-        # 🟢 FIXED: Clear cache after saving new face so AI immediately learns it!
-        clear_cache()
+        # 2. Update the Student document in MongoDB with the embedding
+        students_collection.update_one(
+            {"urn": urn},
+            {"$set": {"embedding": embedding}}
+        )
 
-        return jsonify({"message": f"Successfully enrolled face for URN {urn}"}), 200
+        # 3. Update the lightning-fast local cache
+        known_embeddings[urn] = np.array(embedding)
+
+        return jsonify({"message": f"Biometrics secured and saved to database for {urn}!"}), 200
 
     except Exception as e:
         print("Error during enrollment:", str(e))
-        return jsonify({"message": "Server error during face enrollment"}), 500
-
+        return jsonify({"message": "Server error during biometric enrollment"}), 500
 
 # ======================================================
-# ROUTE: RECOGNIZE (DeepFace with Race Condition Fix)
+# ROUTE: RECOGNIZE (Math Comparison - Blazing Fast)
 # ======================================================
 @app.route("/recognize", methods=["POST"])
 def recognize():
@@ -112,71 +119,56 @@ def recognize():
     if not image_data:
         return jsonify({"urn": "No image"}), 400
     
-    # Check if we have any students enrolled
-    if not os.listdir(FACES_DIR):
+    if not known_embeddings:
         return jsonify({"urn": "No trained data"}), 200
 
-    # Generate a unique filename for this specific request
-    unique_filename = f"temp_{uuid.uuid4()}.jpg"
-    temp_path = os.path.join(BASE_DIR, unique_filename)
-
     try:
-        # 1. Save current frame temporarily
         img = decode_image(image_data)
         if img is None:
             return jsonify({"urn": "Invalid Image"}), 400
-            
-        cv2.imwrite(temp_path, img)
 
-        # 2. Run DeepFace Find
-        results = DeepFace.find(
-            img_path=temp_path, 
-            db_path=FACES_DIR, 
+        # 1. Extract embedding from the LIVE webcam frame
+        results = DeepFace.represent(
+            img_path=img, 
             model_name="GhostFaceNet", 
-            enforce_detection=False,
-            detector_backend="opencv", 
-            silent=True
+            enforce_detection=False
         )
+        live_embedding = results[0]["embedding"]
 
-        # 3. Process Result
-        if len(results) > 0 and not results[0].empty:
-            match = results[0].iloc[0] # Get the top match
-            identity_path = match['identity'] 
-            
-            # Extract URN from folder name
-            urn = os.path.basename(os.path.dirname(identity_path))
-            distance = match['distance']
-            
-            # Threshold (0.40 is standard; adjust if GhostFaceNet is too strict/lenient)
-            if distance < 0.40:
-                print(f"✅ Match: {urn} (Dist: {distance:.4f})")
-                return jsonify({"urn": urn, "confidence": float(1 - distance)})
-            else:
-                return jsonify({"urn": "Unknown"}), 200
+        # 2. Find the best match using Vector Math (Cosine Distance)
+        best_match_urn = "Unknown"
+        min_distance = float('inf')
         
-        return jsonify({"urn": "Unknown"}), 200
+        # DeepFace GhostFaceNet threshold is roughly 0.65. Lower is stricter.
+        THRESHOLD = 0.60 
 
+        for urn, known_emb in known_embeddings.items():
+            distance = cosine(live_embedding, known_emb)
+            if distance < min_distance:
+                min_distance = distance
+                best_match_urn = urn
+
+        if min_distance <= THRESHOLD:
+            print(f"✅ Match: {best_match_urn} (Dist: {min_distance:.4f})")
+            return jsonify({"urn": best_match_urn, "confidence": float(1 - min_distance)})
+        else:
+            return jsonify({"urn": "Unknown"}), 200
+
+    except ValueError:
+        # DeepFace raises ValueError if no face is found in the frame
+        return jsonify({"urn": "No face detected"}), 200
     except Exception as e:
         print(f"❌ Recognition Error: {e}")
         return jsonify({"urn": "Error", "details": str(e)}), 500
 
-    finally:
-        # Always remove the temporary file, even if code crashes
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception as cleanup_error:
-                print(f"⚠️ Could not remove temp file: {cleanup_error}")
-
-#================================
+# ======================================================
 # ROUTE: SYNC
-#==================================
+# ======================================================
 @app.route('/sync', methods=['POST'])
 def sync_faces():
     try:
-        # 🟢 FIXED: Uses the dynamic cache clearing function
-        clear_cache()
-        return jsonify({"message": "Cache cleared! New faces will sync on next scan."}), 200
+        load_embeddings_from_db()
+        return jsonify({"message": "Cache successfully synced with MongoDB!"}), 200
     except Exception as e:
         print("Sync Error:", str(e))
         return jsonify({"message": "Server error during sync."}), 500
@@ -192,21 +184,21 @@ def delete_student():
     if not urn:
         return jsonify({"message": "URN required"}), 400
 
-    person_dir = os.path.join(FACES_DIR, urn)
-    
-    if os.path.exists(person_dir):
-        try:
-            shutil.rmtree(person_dir)
+    try:
+        # 1. Remove the embedding array from MongoDB
+        students_collection.update_one(
+            {"urn": urn},
+            {"$unset": {"embedding": ""}}
+        )
+        
+        # 2. Remove from local cache
+        if urn in known_embeddings:
+            del known_embeddings[urn]
             
-            # 🟢 FIXED: Uses the dynamic cache clearing function
-            clear_cache()
-                
-            return jsonify({"message": f"Deleted {urn}"}), 200
-        except Exception as e:
-            return jsonify({"message": f"Error deleting: {str(e)}"}), 500
-    
-    return jsonify({"message": "Student not found"}), 404
+        return jsonify({"message": f"Biometrics wiped for {urn}"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error deleting: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
-    
+    # Host 0.0.0.0 is better for cloud deployments
+    app.run(host='0.0.0.0', port=5000, debug=True)

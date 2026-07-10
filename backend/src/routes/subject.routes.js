@@ -2,18 +2,21 @@ const express = require("express");
 const router = express.Router();
 const Subject = require("../models/Subject");
 
-/**
- * 🛡️ HELPER: Check for Teacher Schedule Conflicts
- * 🟢 UPDATED: Now checks using the unique teacherId instead of the name
+/*****
+ * HELPER: Check for Teacher Schedule Conflicts
+ * UPDATED: Now accepts an array of days and uses the $in operator
  */
 async function checkTeacherConflict(
   teacherId,
+  daysArray, // 🟢 NOW EXPECTING AN ARRAY OF DAYS
   startTime,
   endTime,
   excludeSubjectId = null,
 ) {
   const query = {
-    teacherId: teacherId, // 🟢 FIX: Checking by ID
+    teacherId: teacherId,
+    // 🟢 NEW: Checks if the teacher has a class on ANY of the submitted days
+    day: { $in: daysArray },
     $or: [
       { startTime: { $lte: startTime }, endTime: { $gt: startTime } },
       { startTime: { $lt: endTime }, endTime: { $gte: endTime } },
@@ -39,11 +42,11 @@ router.get("/", async (req, res) => {
 
 // POST: Add a new Subject with Conflict Validation
 router.post("/", async (req, res) => {
-  // 🟢 FIX: Extracting teacherId from the frontend request
   const {
     name,
     teacher,
     teacherId,
+    day, // 🟢 Expecting an array like ["Monday", "Wednesday"]
     startTime,
     endTime,
     department,
@@ -51,11 +54,14 @@ router.post("/", async (req, res) => {
     semester,
   } = req.body;
 
-  // 🟢 FIX: Checking if teacherId exists
+  // 🟢 Updated Validation: Check if day exists, is an array, and is not empty
   if (
     !name ||
     !teacher ||
     !teacherId ||
+    !day ||
+    !Array.isArray(day) ||
+    day.length === 0 ||
     !startTime ||
     !endTime ||
     !department ||
@@ -63,24 +69,31 @@ router.post("/", async (req, res) => {
     !semester
   ) {
     return res.status(400).json({
-      message: "All fields, including Teacher ID, Dept and Year, are required",
+      message:
+        "All fields are required, and at least one Day must be selected.",
     });
   }
 
   try {
-    // 🟢 FIX: Pass teacherId to the conflict checker
-    const conflict = await checkTeacherConflict(teacherId, startTime, endTime);
+    const conflict = await checkTeacherConflict(
+      teacherId,
+      day,
+      startTime,
+      endTime,
+    );
+
     if (conflict) {
+      // 🟢 Updated Error Message to join the conflict's day array nicely
       return res.status(400).json({
-        message: `Scheduling Conflict: ${teacher} is already taking "${conflict.name}" class between ${conflict.startTime} and ${conflict.endTime}.`,
+        message: `Scheduling Conflict: ${teacher} is already taking "${conflict.name}" on ${conflict.day.join(" and ")} between ${conflict.startTime} and ${conflict.endTime}.`,
       });
     }
 
-    // 🟢 FIX: Passing teacherId to the database
     const newSubject = new Subject({
       name,
       teacher,
       teacherId,
+      day,
       startTime,
       endTime,
       department,
@@ -98,20 +111,27 @@ router.post("/", async (req, res) => {
 
 // PUT: Update/Edit a Subject
 router.put("/:id", async (req, res) => {
-  // 🟢 FIX: Extract teacherId for edits
-  const { teacher, teacherId, startTime, endTime } = req.body;
+  const { teacher, teacherId, day, startTime, endTime } = req.body;
+
+  // 🟢 Validation for PUT as well
+  if (!day || !Array.isArray(day) || day.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "At least one Day must be selected." });
+  }
 
   try {
-    // 🟢 FIX: Pass teacherId to conflict checker
     const conflict = await checkTeacherConflict(
       teacherId,
+      day,
       startTime,
       endTime,
       req.params.id,
     );
+
     if (conflict) {
       return res.status(400).json({
-        message: `Conflict Detected: ${teacher} is already assigned to "${conflict.name}" during this time slot.`,
+        message: `Conflict Detected: ${teacher} is already assigned to "${conflict.name}" on ${conflict.day.join(" and ")} during this time slot.`,
       });
     }
 
