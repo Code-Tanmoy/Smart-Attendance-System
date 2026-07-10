@@ -17,3 +17,6 @@ build/
 .idea/
 
 python-face-api/faces/
+
+*.jpg
+*.jpeg
