@@ -21,9 +21,25 @@ const securityRoutes = require("./routes/security.routes");
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+const allowedOrigins = [
+  "http://localhost:5173", // Local Vite frontend
+  process.env.FRONTEND_URL, // Deployed Vercel frontend URL
+];
+
+app.set("trust proxy", 1);
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );
@@ -51,5 +67,5 @@ app.use("/api/periodwise-attendance", auth, periodwiseRoutes);
 app.use("/api/reports", auth, reportsRoutes);
 app.use("/api/subjects", subjectRoutes);
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server successfully started and listening on port ${PORT}`);
 });

@@ -15,7 +15,9 @@ from dotenv import load_dotenv
 
 app = Flask(__name__)
 load_dotenv()
-CORS(app)
+# Allow requests only from your local React app and your deployed Vercel app
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+CORS(app, origins=[FRONTEND_URL, "http://localhost:5173"])
 
 # ======================================================
 # MONGODB CONFIGURATION 
@@ -26,7 +28,8 @@ MONGO_URI = os.getenv("MONGO_URI")
 
 
 client = MongoClient(MONGO_URI)
-db = client.get_default_database()
+#db = client.get_default_database()
+db = client['attendance_db']
 students_collection = db['students'] 
 
 
@@ -50,6 +53,9 @@ def load_embeddings_from_db():
             
     print(f"✅ Loaded {count} faces into memory.")
 
+    
+print("⏬ Pre-loading GhostFaceNet model weights...")
+DeepFace.build_model("GhostFaceNet")
 # Load embeddings immediately when the server starts
 load_embeddings_from_db()
 
@@ -200,5 +206,6 @@ def delete_student():
         return jsonify({"message": f"Error deleting: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    # Host 0.0.0.0 is better for cloud deployments
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Grab Render's assigned port, or default to 5000 locally
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
