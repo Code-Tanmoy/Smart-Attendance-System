@@ -16,11 +16,12 @@ import {
   FaEye,
   FaEyeSlash,
   FaCalendarAlt,
+  FaTimes,
 } from "react-icons/fa";
 import { backend, faceApi } from "../services/api";
 import toast from "react-hot-toast";
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, setIsOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -35,12 +36,9 @@ const Sidebar = () => {
   const [showPasswords, setShowPasswords] = useState(false);
   const [isSettingsLoading, setIsSettingsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-
-  // 🟢 REAL-TIME DATE & TIME ENGINE
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    // Updates every 1 second so it stays perfectly accurate
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -49,7 +47,7 @@ const Sidebar = () => {
     weekday: "long",
   });
   const formattedDate = currentTime.toLocaleDateString("en-US", {
-    month: "long",
+    month: "short",
     day: "numeric",
     year: "numeric",
   });
@@ -59,12 +57,25 @@ const Sidebar = () => {
   });
 
   const getLinkClass = (path) => {
-    const baseClass =
-      "flex items-center space-x-3 w-full text-left py-2.5 px-4 rounded-xl transition-all duration-200 font-medium text-sm";
-    if (location.pathname === path) {
-      return `${baseClass} bg-blue-50 text-blue-700 shadow-sm border border-blue-100`;
-    }
-    return `${baseClass} text-gray-600 hover:bg-gray-50 hover:text-gray-900 active:bg-gray-100`;
+    const isActive = location.pathname === path;
+    return `flex items-center space-x-3 w-full text-left py-2.5 px-4 rounded-[12px] transition-all duration-300 text-sm font-semibold group ${
+      isActive
+        ? "bg-indigo-50 border border-indigo-100 text-indigo-700 shadow-sm"
+        : "text-slate-600 border border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm hover:-translate-y-0.5"
+    }`;
+  };
+
+  const getIconClass = (path) => {
+    const isActive = location.pathname === path;
+    return `transition-colors duration-300 ${
+      isActive
+        ? "text-indigo-600"
+        : "text-slate-400 group-hover:text-indigo-500"
+    }`;
+  };
+
+  const handleLinkClick = () => {
+    if (window.innerWidth < 1024) setIsOpen(false);
   };
 
   const handleLogout = async () => {
@@ -82,13 +93,11 @@ const Sidebar = () => {
   const handleSyncFaces = async () => {
     setIsSyncing(true);
     const syncPromise = faceApi.post("/sync");
-
     toast.promise(syncPromise, {
       loading: "Syncing AI Database...",
       success: (res) => `✅ ${res.data.message}`,
       error: "❌ Failed to sync faces. Is the Python server running?",
     });
-
     try {
       await syncPromise;
     } catch (error) {
@@ -100,7 +109,6 @@ const Sidebar = () => {
 
   const testEmailEngine = async () => {
     const emailPromise = backend.post("/api/students/trigger-warnings");
-
     toast.promise(emailPromise, {
       loading: "Triggering Warning Engine... 🚨",
       success: (res) => `📧 ${res.data.message}`,
@@ -111,13 +119,10 @@ const Sidebar = () => {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-
-    if (pwdData.newPassword !== pwdData.confirmPassword) {
+    if (pwdData.newPassword !== pwdData.confirmPassword)
       return toast.error("New passwords do not match.");
-    }
-    if (pwdData.newPassword.length < 6) {
+    if (pwdData.newPassword.length < 6)
       return toast.error("Password must be at least 6 characters.");
-    }
 
     setIsSettingsLoading(true);
     const pwdToast = toast.loading("Updating password...");
@@ -127,13 +132,9 @@ const Sidebar = () => {
         currentPassword: pwdData.currentPassword,
         newPassword: pwdData.newPassword,
       });
-
       toast.success(res.data.message, { id: pwdToast });
       setPwdData({ currentPassword: "", newPassword: "", confirmPassword: "" });
-
-      setTimeout(() => {
-        setIsSettingsOpen(false);
-      }, 1500);
+      setTimeout(() => setIsSettingsOpen(false), 1500);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to update password.", {
         id: pwdToast,
@@ -145,184 +146,201 @@ const Sidebar = () => {
 
   return (
     <>
-      <div className="w-full lg:w-64 bg-white shadow-xl rounded-3xl p-5 flex flex-col justify-between min-h-[90vh] border border-gray-100">
-        <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar pr-2">
-          {/* Personalized Welcome Header */}
-          <div className="flex items-center gap-3 mb-5 mt-2 px-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0">
-              <FaShieldAlt size={20} />
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 lg:hidden transition-opacity"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-[280px] bg-white/90 backdrop-blur-xl border-r border-slate-200/60 shadow-2xl lg:shadow-none flex flex-col h-full transform transition-transform duration-300 ease-in-out lg:transform-none lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        {/* Header Profile Section */}
+        <div className="p-6 pb-4 border-b border-slate-100/60">
+          <div className="flex justify-between items-start mb-6 lg:hidden">
+            <span className="font-bold text-xl text-slate-800 tracking-tight">
+              SmartTrack
+            </span>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="p-2 -mr-2 text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors"
+            >
+              <FaTimes size={16} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-[14px] flex items-center justify-center text-white shadow-lg shadow-indigo-200/50">
+              <FaShieldAlt size={22} />
             </div>
             <div className="overflow-hidden">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                Welcome,
+              <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">
+                Administrator
               </h2>
-              <p className="text-lg font-bold text-gray-800 leading-tight truncate">
+              <p className="text-base font-bold text-slate-800 leading-tight truncate">
                 {adminName}
               </p>
             </div>
           </div>
-
-          {/* 🟢 NEW: REAL-TIME DATE WIDGET */}
-          <div className="mx-2 mb-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100/50 flex flex-col gap-1 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
-                <FaCalendarAlt className="mb-0.5 text-blue-500" />{" "}
-                {formattedDay}
-              </p>
-              <p className="text-[10px] font-bold text-gray-500 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100 flex items-center gap-1.5">
-                <FaClock className="text-gray-400" /> {formattedTime}
-              </p>
-            </div>
-            <p className="text-sm font-bold text-gray-800 tracking-tight mt-1">
-              {formattedDate}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Link to="/dashboard" className={getLinkClass("/dashboard")}>
-              <FaHome
-                className={
-                  location.pathname === "/dashboard"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Dashboard</span>
-            </Link>
-
-            {/* STUDENTS SECTION */}
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-4 mb-1 mt-4">
-              Students
-            </p>
-            <Link to="/Addstudent" className={getLinkClass("/Addstudent")}>
-              <FaUser
-                className={
-                  location.pathname === "/Addstudent"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Add Students</span>
-            </Link>
-            <Link to="/Enrolled" className={getLinkClass("/Enrolled")}>
-              <FaFileAlt
-                className={
-                  location.pathname === "/Enrolled"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Enrolled</span>
-            </Link>
-            <Link to="/promote" className={getLinkClass("/promote")}>
-              <FaGraduationCap
-                className={
-                  location.pathname === "/promote"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Promote</span>
-            </Link>
-
-            {/* ACADEMICS SECTION */}
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-4 mb-1 mt-4">
-              Academics
-            </p>
-            <Link
-              to="/manageteacher"
-              className={getLinkClass("/manageteacher")}
-            >
-              <FaChalkboardTeacher
-                className={
-                  location.pathname === "/manageteacher"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Manage Staff</span>
-            </Link>
-            <Link to="/schedule" className={getLinkClass("/schedule")}>
-              <FaClock
-                className={
-                  location.pathname === "/schedule"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Class Schedule</span>
-            </Link>
-            <Link to="/Period" className={getLinkClass("/Period")}>
-              <FaListAlt
-                className={
-                  location.pathname === "/Period"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Period Logs</span>
-            </Link>
-            <Link to="/Reports" className={getLinkClass("/Reports")}>
-              <FaChartBar
-                className={
-                  location.pathname === "/Reports"
-                    ? "text-blue-600"
-                    : "text-gray-400"
-                }
-              />
-              <span>Analytics</span>
-            </Link>
-
-            {/* SYSTEM SECTION */}
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-4 mb-1 mt-4">
-              System Tools
-            </p>
-            <button
-              onClick={testEmailEngine}
-              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors border border-red-100"
-            >
-              <span className="text-lg"></span> Send Warning
-            </button>
-            <button
-              onClick={handleSyncFaces}
-              disabled={isSyncing}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all border ${
-                isSyncing
-                  ? "bg-gray-100 text-gray-400 border-gray-200 cursor-wait"
-                  : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-600 hover:text-white"
-              }`}
-            >
-              <FaSync className={isSyncing ? "animate-spin" : ""} />
-              {isSyncing ? "Syncing..." : "Sync AI Database"}
-            </button>
-          </div>
         </div>
 
-        <div className="pt-4 mt-2 border-t border-gray-100 flex flex-col gap-1.5">
+        {/* Scrollable Navigation */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-4 py-6 space-y-8">
+          {/* Time & Date Widget (Slightly Tinted Card) */}
+          <div className="bg-indigo-50/50 rounded-[16px] p-4 border border-indigo-100/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-indigo-500 flex items-center gap-1.5">
+                <FaCalendarAlt size={12} /> {formattedDay}
+              </span>
+              <span className="text-[11px] font-bold text-slate-600 bg-white px-2 py-1 rounded-[8px] shadow-sm border border-slate-100 flex items-center gap-1">
+                <FaClock className="text-indigo-400" size={10} />{" "}
+                {formattedTime}
+              </span>
+            </div>
+            <span className="text-sm font-bold text-slate-800">
+              {formattedDate}
+            </span>
+          </div>
+
+          {/* Links */}
+          <nav className="space-y-6">
+            <div className="space-y-1.5">
+              <Link
+                to="/dashboard"
+                onClick={handleLinkClick}
+                className={getLinkClass("/dashboard")}
+              >
+                <FaHome size={18} className={getIconClass("/dashboard")} />
+                <span>Dashboard</span>
+              </Link>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-3">
+                Students
+              </p>
+              <Link
+                to="/Addstudent"
+                onClick={handleLinkClick}
+                className={getLinkClass("/Addstudent")}
+              >
+                <FaUser size={18} className={getIconClass("/Addstudent")} />
+                <span>Add Students</span>
+              </Link>
+              <Link
+                to="/Enrolled"
+                onClick={handleLinkClick}
+                className={getLinkClass("/Enrolled")}
+              >
+                <FaFileAlt size={18} className={getIconClass("/Enrolled")} />
+                <span>Enrolled</span>
+              </Link>
+              <Link
+                to="/promote"
+                onClick={handleLinkClick}
+                className={getLinkClass("/promote")}
+              >
+                <FaGraduationCap
+                  size={18}
+                  className={getIconClass("/promote")}
+                />
+                <span>Promote</span>
+              </Link>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-3">
+                Academics
+              </p>
+              <Link
+                to="/manageteacher"
+                onClick={handleLinkClick}
+                className={getLinkClass("/manageteacher")}
+              >
+                <FaChalkboardTeacher
+                  size={18}
+                  className={getIconClass("/manageteacher")}
+                />
+                <span>Manage Staff</span>
+              </Link>
+              <Link
+                to="/schedule"
+                onClick={handleLinkClick}
+                className={getLinkClass("/schedule")}
+              >
+                <FaClock size={18} className={getIconClass("/schedule")} />
+                <span>Class Schedule</span>
+              </Link>
+              <Link
+                to="/Period"
+                onClick={handleLinkClick}
+                className={getLinkClass("/Period")}
+              >
+                <FaListAlt size={18} className={getIconClass("/Period")} />
+                <span>Period Logs</span>
+              </Link>
+              <Link
+                to="/Reports"
+                onClick={handleLinkClick}
+                className={getLinkClass("/Reports")}
+              >
+                <FaChartBar size={18} className={getIconClass("/Reports")} />
+                <span>Analytics</span>
+              </Link>
+            </div>
+
+            <div className="space-y-2.5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-3">
+                System Tools
+              </p>
+              <button
+                onClick={testEmailEngine}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-[12px] text-sm font-bold text-rose-600 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+              >
+                Send Warning Emails
+              </button>
+              <button
+                onClick={handleSyncFaces}
+                disabled={isSyncing}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[12px] text-sm font-bold transition-all duration-300 shadow-sm ${isSyncing ? "bg-slate-50 text-slate-400 border border-slate-200 cursor-wait" : "bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-indigo-200/50 hover:shadow-lg hover:-translate-y-0.5 border-transparent"}`}
+              >
+                <FaSync className={`${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Syncing..." : "Sync AI Database"}
+              </button>
+            </div>
+          </nav>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-4 border-t border-slate-100/60 bg-slate-50/30 space-y-2">
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="w-full py-2.5 px-4 rounded-xl text-gray-600 flex items-center gap-3 hover:bg-gray-50 hover:text-blue-600 transition-all duration-200 font-medium text-sm group"
+            className="w-full py-2.5 px-4 rounded-[12px] text-slate-600 flex items-center gap-3 hover:bg-white hover:text-indigo-600 border border-transparent hover:border-slate-200 hover:shadow-sm hover:-translate-y-0.5 transition-all duration-300 font-semibold text-sm group"
           >
-            <FaCog className="text-gray-400 group-hover:text-blue-600 transition-colors" />
+            <FaCog
+              size={18}
+              className="text-slate-400 group-hover:text-indigo-500 transition-colors group-hover:rotate-90 duration-300"
+            />
             <span>Account Settings</span>
           </button>
-
           <button
             onClick={handleLogout}
-            className="w-full py-2.5 px-4 rounded-xl border border-gray-200 text-gray-600 flex items-center gap-3 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all duration-300 font-bold text-sm"
+            className="w-full py-2.5 px-4 rounded-[12px] bg-white border border-slate-200 text-slate-600 flex items-center gap-3 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 hover:shadow-sm hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm group"
           >
-            <FaDownload className="rotate-[-90deg]" />
+            <FaDownload
+              size={16}
+              className="rotate-[-90deg] text-slate-400 group-hover:text-rose-500 transition-colors"
+            />
             <span>Log Out</span>
           </button>
         </div>
-      </div>
+      </aside>
 
-      {/* ========================================================
-          🟢 SETTINGS / CHANGE PASSWORD MODAL (Overlay)
-          ======================================================== */}
+      {/* Glassmorphism Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative">
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white/90 backdrop-blur-xl rounded-[20px] shadow-2xl border border-white w-full max-w-md p-8 relative animate-in zoom-in-95 duration-200">
             <button
               onClick={() => {
                 setIsSettingsOpen(false);
@@ -332,133 +350,75 @@ const Sidebar = () => {
                   confirmPassword: "",
                 });
               }}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 transition-colors"
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-800 transition-colors p-2 bg-slate-50 hover:bg-slate-100 rounded-full"
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <FaTimes />
             </button>
 
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
-                <FaCog size={20} />
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-[14px] flex items-center justify-center border border-indigo-100/50">
+                <FaCog size={24} className="animate-spin-slow" />
               </div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Account Settings
-              </h2>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">
+                  Account Settings
+                </h2>
+                <p className="text-sm text-slate-500 font-medium mt-0.5">
+                  Manage your security preferences
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                  Current Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPasswords ? "text" : "password"}
-                    required
-                    value={pwdData.currentPassword}
-                    onChange={(e) =>
-                      setPwdData({
-                        ...pwdData,
-                        currentPassword: e.target.value,
-                      })
-                    }
-                    className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords(!showPasswords)}
-                    className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
-                  >
-                    {showPasswords ? (
-                      <FaEyeSlash size={18} />
-                    ) : (
-                      <FaEye size={18} />
-                    )}
-                  </button>
-                </div>
-              </div>
+            <form onSubmit={handleChangePassword} className="space-y-5">
+              {["currentPassword", "newPassword", "confirmPassword"].map(
+                (field, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">
+                      {field.replace(/([A-Z])/g, " $1").trim()}
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type={showPasswords ? "text" : "password"}
+                        required
+                        value={pwdData[field]}
+                        onChange={(e) =>
+                          setPwdData({ ...pwdData, [field]: e.target.value })
+                        }
+                        className="w-full px-4 py-3 pr-12 border border-slate-200 rounded-[12px] bg-white text-slate-800 font-medium placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all text-sm group-hover:border-slate-300"
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords(!showPasswords)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                      >
+                        {showPasswords ? (
+                          <FaEyeSlash size={18} />
+                        ) : (
+                          <FaEye size={18} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ),
+              )}
 
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                  New Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPasswords ? "text" : "password"}
-                    required
-                    value={pwdData.newPassword}
-                    onChange={(e) =>
-                      setPwdData({ ...pwdData, newPassword: e.target.value })
-                    }
-                    className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords(!showPasswords)}
-                    className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
-                  >
-                    {showPasswords ? (
-                      <FaEyeSlash size={18} />
-                    ) : (
-                      <FaEye size={18} />
-                    )}
-                  </button>
-                </div>
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  disabled={isSettingsLoading}
+                  className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-bold py-3.5 rounded-[12px] hover:shadow-lg hover:shadow-indigo-200 hover:-translate-y-0.5 active:translate-y-0 disabled:bg-indigo-300 disabled:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2"
+                >
+                  {isSettingsLoading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    "Save New Password"
+                  )}
+                </button>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                  Confirm New Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPasswords ? "text" : "password"}
-                    required
-                    value={pwdData.confirmPassword}
-                    onChange={(e) =>
-                      setPwdData({
-                        ...pwdData,
-                        confirmPassword: e.target.value,
-                      })
-                    }
-                    className="w-full p-3 pr-12 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords(!showPasswords)}
-                    className="absolute right-4 top-3.5 text-gray-400 hover:text-blue-500 transition-colors"
-                  >
-                    {showPasswords ? (
-                      <FaEyeSlash size={18} />
-                    ) : (
-                      <FaEye size={18} />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSettingsLoading}
-                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 disabled:bg-blue-300 transition-colors mt-6 shadow-md"
-              >
-                {isSettingsLoading ? "Updating..." : "Change Password"}
-              </button>
             </form>
           </div>
         </div>

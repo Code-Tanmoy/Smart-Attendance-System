@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   FaDownload,
@@ -9,6 +9,7 @@ import {
   FaLayerGroup,
   FaChalkboardTeacher,
   FaCalendarAlt,
+  FaTimes,
 } from "react-icons/fa";
 import { backend } from "../services/api";
 import toast from "react-hot-toast";
@@ -19,13 +20,13 @@ const Report = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🛡️ ROLE & VIEW CONTEXT
+  // ROLE & VIEW CONTEXT
   const userRole = localStorage.getItem("userRole");
   const teacherId = localStorage.getItem("teacherId");
   const [viewMode, setViewMode] = useState("Subject");
   const [teacherDept, setTeacherDept] = useState("");
 
-  // 🔍 GLOBAL FILTERS
+  // GLOBAL FILTERS
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDept, setFilterDept] = useState("All");
   const [filterSemester, setFilterSemester] = useState("All");
@@ -42,10 +43,8 @@ const Report = () => {
           backend.get("/api/periodwise-attendance"),
         ];
 
-        // Fetch teachers to lock the department if it's a teacher
-        if (userRole === "teacher") {
+        if (userRole === "teacher")
           fetchPromises.push(backend.get("/api/teachers"));
-        }
 
         const results = await Promise.all(fetchPromises);
         const activeStudents = results[0].data.filter(
@@ -56,14 +55,13 @@ const Report = () => {
         setSubjects(results[1].data);
         setLogs(results[2].data);
 
-        // 🔒 Lock Department for Teachers
+        // Lock Department for Teachers
         if (userRole === "teacher" && results[3]) {
           const me = results[3].data.find((t) => t.teacherId === teacherId);
           if (me) {
             setTeacherDept(me.department);
             setFilterDept(me.department);
           } else {
-            // Fallback: Guess dept from subjects they teach
             const mySub = results[1].data.find(
               (s) => s.teacherId === teacherId,
             );
@@ -83,11 +81,8 @@ const Report = () => {
     fetchAllData();
   }, [userRole, teacherId]);
 
-  // 🧹 SMART CLEAR FILTERS
   const handleClearFilters = () => {
-    if (userRole !== "teacher") {
-      setFilterDept("All");
-    }
+    if (userRole !== "teacher") setFilterDept("All");
     setFilterSemester("All");
     setFilterSubjectId("");
     setSearchTerm("");
@@ -95,9 +90,7 @@ const Report = () => {
     setEndDate("");
   };
 
-  // ==========================================
-  // 🧠 ENGINE 1: SUBJECT-SPECIFIC VIEW (Aggregated)
-  // ==========================================
+  // ENGINE 1: SUBJECT-SPECIFIC VIEW
   const availableSubjects = useMemo(() => {
     return subjects.filter((s) => {
       const matchDept = filterDept === "All" || s.department === filterDept;
@@ -125,12 +118,11 @@ const Report = () => {
       targetStudents = targetStudents.filter(
         (s) =>
           s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.urn.toLowerCase().includes(searchTerm),
+          s.urn.toLowerCase().includes(searchTerm.toLowerCase()),
       );
     }
     targetStudents.sort((a, b) => a.name.localeCompare(b.name));
 
-    // 🟢 Apply Global Date Range Filter
     const filteredLogs = logs.filter((log) => {
       if (!startDate && !endDate) return true;
       const logDate = new Date(log.recognizedAt).toISOString().split("T")[0];
@@ -141,7 +133,6 @@ const Report = () => {
       return true;
     });
 
-    // Isolate logs for THIS subject
     const subjectLogs = filteredLogs.filter((log) => {
       const logSubId = log.subjectId?._id || log.subjectId;
       return (
@@ -180,9 +171,7 @@ const Report = () => {
     endDate,
   ]);
 
-  // ==========================================
-  // 🧠 ENGINE 2: MASTER CONSOLIDATED VIEW
-  // ==========================================
+  // ENGINE 2: MASTER CONSOLIDATED VIEW
   const masterReportData = useMemo(() => {
     if (viewMode !== "Master" || !students.length || !subjects.length)
       return [];
@@ -205,7 +194,6 @@ const Report = () => {
       );
     }
 
-    // Tiered Sorting
     const semesterWeights = {
       "1st": 1,
       "2nd": 2,
@@ -223,7 +211,6 @@ const Report = () => {
       return a.urn.localeCompare(b.urn, undefined, { numeric: true });
     });
 
-    // 🟢 Apply Global Date Range Filter
     const filteredLogs = logs.filter((log) => {
       if (!startDate && !endDate) return true;
       const logDate = new Date(log.recognizedAt).toISOString().split("T")[0];
@@ -273,9 +260,8 @@ const Report = () => {
         overallPossible += possible;
         overallAttended += attended;
 
-        if (possible > 0) {
+        if (possible > 0)
           breakdown.push({ name: sub.name, attended, possible });
-        }
       });
 
       return {
@@ -301,7 +287,6 @@ const Report = () => {
     endDate,
   ]);
 
-  // 📦 ARCHIVE SEMESTER HANDLER
   const handleEndSemester = async () => {
     const isConfirmed = window.confirm(
       "📦 ARCHIVE SEMESTER \n\nAre you sure you want to officially end this semester?\n\nThis will safely move all current attendance records into the Database Archive for historical keeping, and reset the active dashboard to 0% for the new semester.\n\nClick OK to proceed.",
@@ -315,7 +300,7 @@ const Report = () => {
         const res = await backend.post(
           "/api/periodwise-attendance/end-semester",
         );
-        setLogs([]); // Instantly clear the UI to reflect the fresh start
+        setLogs([]);
         toast.success(res.data.message, { id: archiveToast, icon: "📦" });
       } catch (err) {
         toast.error("Failed to archive semester.", { id: archiveToast });
@@ -323,20 +308,18 @@ const Report = () => {
     }
   };
 
-  // 📥 SMART EXPORT LOGIC
   const handleExportCSV = () => {
     const dataToExport =
       viewMode === "Subject" ? subjectReportData : masterReportData;
     if (dataToExport.length === 0) {
-      toast.error("No data available to export based on current filters.");
-      return;
+      return toast.error(
+        "No data available to export based on current filters.",
+      );
     }
 
     let headers = [];
     let csvRows = [];
     let filename = "";
-
-    // Add date string for filename
     const dateStr =
       startDate || endDate
         ? `_from_${startDate || "start"}_to_${endDate || "end"}`
@@ -395,89 +378,105 @@ const Report = () => {
     ].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     toast.success("Report exported successfully!");
   };
 
+  const inputClasses =
+    "w-full pl-10 pr-4 py-3 rounded-[12px] bg-white/50 border border-slate-200/80 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 hover:border-slate-300 focus:bg-white transition-all duration-300 text-sm font-medium text-slate-700 placeholder-slate-400 shadow-sm";
+  const selectClasses = `${inputClasses} appearance-none disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed cursor-pointer`;
+  const iconClasses =
+    "absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none group-focus-within:text-indigo-500 transition-colors duration-300";
+
   return (
-    <div className="relative pb-10 w-full max-w-full bg-gray-50 min-h-screen">
+    <div
+      className={
+        userRole === "teacher"
+          ? "min-h-screen bg-[#F8FAFC] pb-10 relative selection:bg-indigo-100"
+          : "max-w-7xl mx-auto pb-10 relative z-10 space-y-8"
+      }
+    >
+      {/* Ambient Blobs for Teacher View */}
       {userRole === "teacher" && (
-        <nav className="bg-white border-b border-gray-200 px-6 lg:px-8 py-4 flex justify-between items-center mb-8 shadow-sm w-full">
-          <div className="font-bold text-xl text-blue-600 flex items-center gap-2">
+        <>
+          <div className="fixed top-[-10%] left-[-10%] w-96 h-96 bg-indigo-300/30 rounded-full mix-blend-multiply filter blur-[100px] pointer-events-none"></div>
+          <div className="fixed bottom-[-10%] right-[-5%] w-96 h-96 bg-teal-300/20 rounded-full mix-blend-multiply filter blur-[100px] pointer-events-none"></div>
+        </>
+      )}
+
+      {/* TEACHER NAVBAR */}
+      {userRole === "teacher" && (
+        <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-6 py-4 flex justify-between items-center mb-8 shadow-sm relative z-20">
+          <div className="font-bold text-xl text-indigo-600 tracking-tight flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-100 rounded-[10px] flex items-center justify-center">
+              <FaChalkboardTeacher size={14} />
+            </div>
             Teacher's Dashboard
           </div>
           <Link
             to="/teacherdashboard"
-            className="text-gray-500 hover:text-blue-600 flex items-center gap-2 text-sm font-bold transition-colors"
+            className="text-slate-500 hover:text-indigo-600 flex items-center gap-2 text-sm font-bold transition-all hover:-translate-x-1"
           >
-            <FaArrowLeft /> Back to Dashboard
+            <FaArrowLeft /> Back
           </Link>
         </nav>
       )}
 
       <div
-        className={`w-full ${userRole === "teacher" ? "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" : "px-4 pt-6"}`}
+        className={
+          userRole === "teacher"
+            ? "max-w-7xl mx-auto px-4 lg:px-8 relative z-10"
+            : "relative z-10"
+        }
       >
-        {/* 🔄 VIEW TOGGLE & HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6 border-b border-gray-200 pb-6">
+        {/* VIEW TOGGLE & HEADER */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-8 gap-6 border-b border-slate-200/60 pb-6">
           <div>
-            <div className="flex bg-gray-200/60 p-1 rounded-xl w-fit mb-4 border border-gray-200 shadow-inner">
+            <div className="flex bg-slate-100/80 p-1.5 rounded-[16px] w-fit mb-4 border border-slate-200/50">
               <button
                 onClick={() => setViewMode("Subject")}
-                className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${
-                  viewMode === "Subject"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
+                className={`px-6 py-2.5 rounded-[12px] font-bold text-sm transition-all duration-300 ${viewMode === "Subject" ? "bg-white text-indigo-600 shadow-sm shadow-slate-200/50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}
               >
                 Subject View
               </button>
               <button
                 onClick={() => setViewMode("Master")}
-                className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${
-                  viewMode === "Master"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
+                className={`px-6 py-2.5 rounded-[12px] font-bold text-sm transition-all duration-300 ${viewMode === "Master" ? "bg-white text-indigo-600 shadow-sm shadow-slate-200/50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}
               >
                 Master View
               </button>
             </div>
-            <h1 className="text-3xl font-bold text-gray-800">
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
               {viewMode === "Subject"
                 ? "Subject Attendance Report"
                 : "Master Consolidated Report"}
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1 font-medium">
               {viewMode === "Subject"
                 ? "View detailed attendance logs for your specific classes."
                 : "View combined attendance across all subjects for grading and mentoring."}
             </p>
           </div>
 
-          <div className="flex gap-3">
-            {/* 🟢 EXPORT BUTTON */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
             <button
               onClick={handleExportCSV}
               disabled={
                 (viewMode === "Subject" && !selectedSubject) ||
                 (viewMode === "Master" && masterReportData.length === 0)
               }
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all whitespace-nowrap"
+              className="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-600 hover:shadow-lg hover:shadow-emerald-200 hover:-translate-y-0.5 disabled:bg-slate-300 disabled:shadow-none disabled:translate-y-0 text-white px-6 py-3 rounded-[12px] font-bold flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.98] disabled:active:scale-100 text-sm"
             >
               <FaDownload /> Export CSV
             </button>
-
-            {/* 📦 ADMIN ARCHIVE BUTTON */}
             {userRole === "admin" && (
               <button
                 onClick={handleEndSemester}
-                className="bg-red-700 hover:bg-red-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all whitespace-nowrap"
+                className="w-full sm:w-auto bg-gradient-to-r from-rose-500 to-rose-600 hover:shadow-lg hover:shadow-rose-200 hover:-translate-y-0.5 text-white px-6 py-3 rounded-[12px] font-bold flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.98] text-sm"
               >
                 End Semester
               </button>
@@ -485,34 +484,28 @@ const Report = () => {
           </div>
         </div>
 
-        {/* 🔍 UNIVERSAL FILTERS BAR */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 space-y-4 w-full relative">
-          {/* Header & Clear Button */}
-          <div className="flex justify-between items-center pb-2 border-b border-gray-50">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Report Parameters
+        {/* UNIVERSAL FILTERS BAR */}
+        <div className="bg-white/60 backdrop-blur-md p-6 rounded-[24px] shadow-sm border border-slate-200/60 mb-8 w-full relative">
+          <div className="flex justify-between items-center pb-4 mb-4 border-b border-slate-100/80">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <FaFilter /> Report Parameters
             </h3>
             <button
               onClick={handleClearFilters}
-              className="text-[10px] uppercase font-bold text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors border border-gray-200 shadow-sm"
+              className="text-[10px] uppercase font-bold text-slate-500 hover:text-rose-600 bg-white hover:bg-rose-50 px-3 py-1.5 rounded-[8px] transition-all border border-slate-200/80 hover:border-rose-200 shadow-sm flex items-center gap-1.5"
             >
-              ✕ Clear All Filters
+              <FaTimes /> Clear All
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {/* DEPARTMENT FILTER */}
-            <div className="relative w-full">
-              <FaFilter className="absolute left-3 top-3.5 text-gray-400 text-sm" />
+            <div className="relative group w-full">
+              <FaFilter className={iconClasses} />
               <select
                 value={filterDept}
                 onChange={(e) => setFilterDept(e.target.value)}
                 disabled={userRole === "teacher"}
-                className={`w-full pl-9 pr-4 py-2.5 rounded-xl text-sm font-medium outline-none border focus:ring-2 focus:ring-blue-500 ${
-                  userRole === "teacher"
-                    ? "bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-gray-50 border-gray-200 text-gray-700"
-                }`}
+                className={selectClasses}
               >
                 <option value="All">All Departments</option>
                 {["CSE", "ECE", "ME", "AI", "CS", "IT"].map((d) => (
@@ -523,16 +516,15 @@ const Report = () => {
               </select>
             </div>
 
-            {/* SEMESTER FILTER */}
-            <div className="relative w-full">
-              <FaLayerGroup className="absolute left-3 top-3.5 text-gray-400 text-sm" />
+            <div className="relative group w-full">
+              <FaLayerGroup className={iconClasses} />
               <select
                 value={filterSemester}
                 onChange={(e) => {
                   setFilterSemester(e.target.value);
                   setFilterSubjectId("");
                 }}
-                className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none text-gray-700 focus:ring-2 focus:ring-blue-500"
+                className={selectClasses}
               >
                 <option value="All">All Semesters</option>
                 {["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"].map(
@@ -545,28 +537,26 @@ const Report = () => {
               </select>
             </div>
 
-            {/* SEARCH */}
-            <div className="relative w-full xl:col-span-2">
-              <FaSearch className="absolute left-3 top-3.5 text-gray-400" />
+            <div className="relative group w-full xl:col-span-2">
+              <FaSearch className={iconClasses} />
               <input
                 type="text"
                 placeholder="Search by Student Name or URN..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                className={inputClasses}
               />
             </div>
           </div>
 
-          {/* SECONDARY ROW: Subject & Dates */}
-          <div className="flex flex-col lg:flex-row gap-4 pt-2">
+          <div className="flex flex-col xl:flex-row gap-4 pt-4 mt-4 border-t border-slate-100/80">
             {viewMode === "Subject" && (
-              <div className="relative w-full lg:w-1/3">
-                <FaChalkboardTeacher className="absolute left-3 top-3.5 text-blue-500" />
+              <div className="relative group w-full xl:w-1/3">
+                <FaChalkboardTeacher className={iconClasses} />
                 <select
                   value={filterSubjectId}
                   onChange={(e) => setFilterSubjectId(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold outline-none text-blue-800 focus:ring-2 focus:ring-blue-600 truncate"
+                  className={`${selectClasses} !bg-indigo-50/50 hover:!bg-indigo-50 !border-indigo-200/60 !text-indigo-800 focus:!ring-indigo-500/20`}
                 >
                   <option value="">-- Select Subject --</option>
                   {availableSubjects.map((sub) => (
@@ -578,61 +568,75 @@ const Report = () => {
               </div>
             )}
 
-            {/* GLOBAL DATE RANGE */}
             <div
-              className={`flex items-center gap-3 w-full ${viewMode === "Subject" ? "lg:w-2/3 justify-end" : "justify-start"}`}
+              className={`flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full ${viewMode === "Subject" ? "xl:w-2/3 xl:justify-end" : "justify-start"}`}
             >
-              <span className="text-xs font-bold text-gray-400 flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-widest pl-1">
                 <FaCalendarAlt /> Date Range:
               </span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 rounded-xl text-sm font-medium outline-none border border-gray-200 bg-gray-50 text-gray-700 focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
-              />
-              <span className="text-gray-400 font-bold text-sm">to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-3 py-2 rounded-xl text-sm font-medium outline-none border border-gray-200 bg-gray-50 text-gray-700 focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
-              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={`${inputClasses.replace("pl-10", "pl-4")} w-full sm:w-auto !py-2.5 cursor-pointer`}
+                />
+                <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                  to
+                </span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className={`${inputClasses.replace("pl-10", "pl-4")} w-full sm:w-auto !py-2.5 cursor-pointer`}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* 📊 DYNAMIC TABLE RENDERING */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full overflow-hidden">
-          <div className="overflow-x-auto min-h-[400px] w-full pb-4">
+        {/* DYNAMIC TABLE RENDERING */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-[24px] shadow-sm border border-slate-200/60 w-full overflow-hidden">
+          <div className="overflow-x-auto min-h-[400px]">
             {/* --- TABLE: SUBJECT MODE --- */}
             {viewMode === "Subject" && (
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold tracking-wider border-b border-gray-100">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-slate-50/80 backdrop-blur-md text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-200/60">
                   <tr>
-                    <th className="px-6 py-4">Student</th>
-                    <th className="px-6 py-4">URN</th>
-                    <th className="px-6 py-4 text-center">Classes Held</th>
-                    <th className="px-6 py-4 text-center">Attended</th>
-                    <th className="px-6 py-4 text-center">Subject %</th>
+                    <th className="px-6 py-4.5 rounded-tl-[16px]">
+                      Student Name
+                    </th>
+                    <th className="px-6 py-4.5">URN</th>
+                    <th className="px-6 py-4.5 text-center">Classes Held</th>
+                    <th className="px-6 py-4.5 text-center">Attended</th>
+                    <th className="px-6 py-4.5 text-center rounded-tr-[16px]">
+                      Subject %
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100/80">
                   {loading ? (
                     <tr>
                       <td
                         colSpan="5"
-                        className="text-center py-10 text-gray-400"
+                        className="text-center py-20 text-slate-400"
                       >
-                        Loading records...
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="w-8 h-8 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                          <span className="font-medium text-sm">
+                            Loading records...
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ) : !selectedSubject ? (
                     <tr>
-                      <td colSpan="5" className="text-center py-20">
-                        <FaChalkboardTeacher className="mx-auto text-4xl text-gray-300 mb-3" />
-                        <p className="text-gray-500 font-medium">
-                          Please select a subject from the dropdown.
+                      <td colSpan="5" className="text-center py-24">
+                        <div className="p-4 bg-slate-50 inline-block rounded-full mb-4 border border-slate-100">
+                          <FaChalkboardTeacher className="text-3xl text-slate-300" />
+                        </div>
+                        <p className="text-slate-500 font-medium text-sm">
+                          Please select a subject from the dropdown above.
                         </p>
                       </td>
                     </tr>
@@ -640,23 +644,26 @@ const Report = () => {
                     subjectReportData.map((student, i) => (
                       <tr
                         key={i}
-                        className="hover:bg-gray-50 transition-colors"
+                        className="hover:bg-slate-50/80 transition-all duration-300 group hover:-translate-y-[1px] hover:shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]"
                       >
-                        <td className="px-6 py-4 font-bold text-gray-800 whitespace-nowrap">
+                        <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-[8px] bg-indigo-50/80 border border-indigo-100/60 text-indigo-600 flex items-center justify-center text-xs font-bold shadow-sm">
+                            {student.name.charAt(0)}
+                          </div>
                           {student.name}
                         </td>
-                        <td className="px-6 py-4 text-gray-500 font-mono text-xs">
+                        <td className="px-6 py-4 text-slate-500 font-mono text-xs font-medium">
                           {student.urn}
                         </td>
-                        <td className="px-6 py-4 text-center text-gray-500">
+                        <td className="px-6 py-4 text-center text-slate-500 font-medium">
                           {student.totalPossible}
                         </td>
-                        <td className="px-6 py-4 text-center font-bold text-gray-800">
+                        <td className="px-6 py-4 text-center font-bold text-slate-800">
                           {student.totalAttended}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-bold ${student.percentage >= 75 ? "bg-green-100 text-green-700" : student.percentage >= 50 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}
+                            className={`px-3 py-1.5 rounded-[8px] text-[11px] font-bold border shadow-sm ${student.percentage >= 75 ? "bg-emerald-50 text-emerald-700 border-emerald-200/80" : student.percentage >= 50 ? "bg-amber-50 text-amber-700 border-amber-200/80" : "bg-rose-50 text-rose-700 border-rose-200/80"}`}
                           >
                             {student.percentage}%
                           </span>
@@ -667,9 +674,9 @@ const Report = () => {
                     <tr>
                       <td
                         colSpan="5"
-                        className="text-center py-10 text-gray-400 italic"
+                        className="text-center py-20 text-slate-400 italic text-sm font-medium bg-slate-50/30"
                       >
-                        No students found.
+                        No students found for this subject.
                       </td>
                     </tr>
                   )}
@@ -679,64 +686,79 @@ const Report = () => {
 
             {/* --- TABLE: MASTER MODE --- */}
             {viewMode === "Master" && (
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold tracking-wider border-b border-gray-100">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-slate-50/80 backdrop-blur-md text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-200/60">
                   <tr>
-                    <th className="px-6 py-4">Student Details</th>
-                    <th className="px-6 py-4">Cohort</th>
-                    <th className="px-6 py-4">Subject Breakdown</th>
-                    <th className="px-6 py-4 text-center">Overall Ratio</th>
-                    <th className="px-6 py-4 text-center">Overall %</th>
+                    <th className="px-6 py-4.5 rounded-tl-[16px]">
+                      Student Details
+                    </th>
+                    <th className="px-6 py-4.5">Cohort</th>
+                    <th className="px-6 py-4.5">Subject Breakdown</th>
+                    <th className="px-6 py-4.5 text-center">Overall Ratio</th>
+                    <th className="px-6 py-4.5 text-center rounded-tr-[16px]">
+                      Overall %
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100/80">
                   {loading ? (
                     <tr>
                       <td
                         colSpan="5"
-                        className="text-center py-10 text-gray-400"
+                        className="text-center py-20 text-slate-400"
                       >
-                        Compiling master records...
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="w-8 h-8 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                          <span className="font-medium text-sm">
+                            Compiling master records...
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ) : masterReportData.length > 0 ? (
                     masterReportData.map((student, i) => (
                       <tr
                         key={i}
-                        className="hover:bg-gray-50 transition-colors"
+                        className="hover:bg-slate-50/80 transition-all duration-300 group hover:-translate-y-[1px] hover:shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]"
                       >
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-gray-800">
-                            {student.name}
+                        <td className="px-6 py-4 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-[12px] bg-slate-100 border border-slate-200/80 text-slate-600 flex items-center justify-center text-sm font-bold shadow-sm">
+                            {student.name.charAt(0)}
                           </div>
-                          <div className="text-gray-500 font-mono text-xs mt-0.5">
-                            {student.urn}
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-800 tracking-tight">
+                              {student.name}
+                            </span>
+                            <span className="text-slate-500 font-mono text-[10px] font-medium">
+                              {student.urn}
+                            </span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs font-bold inline-block">
+                          <span className="bg-slate-100/80 border border-slate-200/60 text-slate-600 px-3 py-1.5 rounded-[8px] text-[10px] uppercase tracking-widest font-bold inline-block shadow-sm">
                             {student.department} • {student.semester}
                           </span>
                         </td>
                         <td className="px-6 py-4">
                           {student.breakdown.length > 0 ? (
-                            <div className="flex flex-wrap gap-2 max-w-sm">
+                            <div className="flex flex-wrap gap-2 max-w-sm sm:max-w-md">
                               {student.breakdown.map((sub, idx) => {
                                 const subPercent = Math.round(
                                   (sub.attended / sub.possible) * 100,
                                 );
                                 let tagColor =
-                                  "bg-blue-50 text-blue-700 border-blue-100";
+                                  "bg-emerald-50/80 text-emerald-700 border-emerald-200/80 shadow-sm";
                                 if (subPercent < 75)
                                   tagColor =
-                                    "bg-orange-50 text-orange-700 border-orange-100";
+                                    "bg-amber-50/80 text-amber-700 border-amber-200/80 shadow-sm";
                                 if (subPercent < 50)
                                   tagColor =
-                                    "bg-red-50 text-red-700 border-red-100";
+                                    "bg-rose-50/80 text-rose-700 border-rose-200/80 shadow-sm";
+
                                 return (
                                   <span
                                     key={idx}
-                                    className={`text-[10px] font-bold px-2 py-1 rounded border ${tagColor}`}
+                                    className={`text-[9px] font-bold px-2 py-1 rounded-[6px] border ${tagColor}`}
                                     title={`${sub.name}: ${subPercent}%`}
                                   >
                                     {sub.name}: {sub.attended}/{sub.possible}
@@ -745,22 +767,22 @@ const Report = () => {
                               })}
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-xs italic">
+                            <span className="text-slate-400 text-xs italic font-medium">
                               No classes held yet
                             </span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <div className="font-bold text-gray-800">
+                          <div className="font-bold text-slate-800 bg-white border border-slate-200/80 shadow-sm inline-block px-3 py-1.5 rounded-[8px] text-[13px]">
                             {student.overallAttended}{" "}
-                            <span className="text-gray-400 text-xs font-normal">
+                            <span className="text-slate-400 text-[10px] font-bold uppercase ml-0.5">
                               / {student.overallPossible}
                             </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span
-                            className={`px-3 py-1.5 rounded-xl text-sm font-bold shadow-sm ${student.percentage >= 75 ? "bg-green-100 text-green-700 border border-green-200" : student.percentage >= 50 ? "bg-yellow-100 text-yellow-700 border border-yellow-200" : "bg-red-100 text-red-700 border border-red-200"}`}
+                            className={`px-3.5 py-2 rounded-[10px] text-[13px] font-bold shadow-sm border ${student.percentage >= 75 ? "bg-emerald-50 text-emerald-700 border-emerald-200/80" : student.percentage >= 50 ? "bg-amber-50 text-amber-700 border-amber-200/80" : "bg-rose-50 text-rose-700 border-rose-200/80"}`}
                           >
                             {student.percentage}%
                           </span>
@@ -771,10 +793,14 @@ const Report = () => {
                     <tr>
                       <td
                         colSpan="5"
-                        className="text-center py-16 text-gray-400 italic"
+                        className="text-center py-24 bg-slate-50/30"
                       >
-                        <FaUserGraduate className="mx-auto text-4xl text-gray-300 mb-3" />
-                        No students found matching these filters.
+                        <div className="p-4 bg-white inline-block rounded-full mb-4 border border-slate-100 shadow-sm">
+                          <FaUserGraduate className="text-3xl text-slate-300" />
+                        </div>
+                        <p className="text-slate-500 font-medium text-sm italic">
+                          No students found matching these filters.
+                        </p>
                       </td>
                     </tr>
                   )}

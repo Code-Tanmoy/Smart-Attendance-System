@@ -226,7 +226,7 @@ router.post("/signin", loginLimiter, async (req, res) => {
 
     res.cookie("token", token, {
       ...COOKIE_OPTIONS,
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
     });
 
     console.log(`✅ ${role.toUpperCase()} logged in:`, user.email);
@@ -260,7 +260,12 @@ router.post("/signin", loginLimiter, async (req, res) => {
 
 // LOGOUT
 router.post("/logout", (req, res) => {
-  res.clearCookie("token", COOKIE_OPTIONS);
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+  });
   return res.json({ message: "Logged out successfully" });
 });
 
