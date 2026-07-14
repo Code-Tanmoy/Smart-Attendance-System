@@ -272,14 +272,14 @@ Follow these simple steps to use the Smart Attendance System.
 ## 🔐 Step 1: Login
 
 - Open the application.
-- Login using your credentials.
+- Login using your credentials (Teacher/Student/Admin).
 - After successful authentication, you will be redirected to the dashboard.
 
 ---
 
 ## 👨‍🎓 Step 2: Register Students
 
-- Navigate to **Student Management**.
+- As Admin Navigate to **Student Management**.
 - Add student details.
 - Capture or upload student face images.
 - The system generates and stores face embeddings for future recognition.
@@ -288,7 +288,7 @@ Follow these simple steps to use the Smart Attendance System.
 
 ## 👨‍🏫 Step 3: Manage Teachers & Subjects
 
-- Add teacher information.
+-As Admin add teacher information.
 - Create subjects.
 - Assign teachers to subjects.
 
@@ -306,8 +306,8 @@ The backend verifies schedules before marking attendance.
 
 ## 📸 Step 5: Start Attendance
 
-- Open the Attendance page.
-- Allow camera permission.
+- As Teacher Open the Attendance page.
+- Start Scanning student's face.
 - The system starts capturing live images.
 
 ---
@@ -318,7 +318,7 @@ The AI service:
 
 - Detects faces using OpenCV.
 - Extracts facial embeddings using DeepFace.
-- Matches faces using GhostFaceNet / VGG-Face.
+- Matches faces using GhostFaceNet .
 - Identifies registered students.
 
 ---
@@ -337,7 +337,7 @@ The attendance is automatically recorded in MongoDB.
 
 ## 📊 Step 8: View Reports
 
-Teachers can:
+Teachers and Admin can:
 
 - View attendance history
 - Search attendance
@@ -381,61 +381,93 @@ Teachers can:
 
 # 📷 Screenshots
 
-## 🏠 Landing Page
-
-```md
-![Landing Page](ScreenShots/LandingPage.png)
-```
-
----
-
-## 🔐 Login Page
-
-```md
-![Login](ScreenShots/Login.png)
-```
-
----
-
 ## 📊 Dashboard
 
-```md
-![Dashboard](ScreenShots/Dashboard.png)
-```
+![Dashboard](project-file/dashboard.png)
 
 ---
 
-## 👨‍🎓 Student Management
+## 📈 Analytics
 
-```md
-![Students](ScreenShots/Students.png)
-```
+![Analytics](project-file/analytics.png)
 
 ---
 
-## 📸 Face Recognition
+## 👨‍🎓 Add Student
 
-```md
-![Face Recognition](ScreenShots/Recognition.png)
-```
+![Add Student](project-file/add_student.png)
 
 ---
 
-## 📅 Attendance
+## 👨‍🏫 Faculty Dashboard
 
-```md
-![Attendance](ScreenShots/Attendance.png)
-```
+![Faculty Dashboard](project-file/faculty_dashboard.png)
 
 ---
 
-## 📈 Reports
+## 👨‍🎓 Student Dashboard
 
-```md
-![Reports](ScreenShots/Reports.png)
-```
+![Student Dashboard](project-file/student_dashboard.png)
 
-> Replace the filenames above with your actual screenshot names.
+---
+
+## 📸 Face Scanner
+
+![Scanner](project-file/scanner.png)
+
+---
+
+## 📅 Class Schedule
+
+![Class Schedule](project-file/class_schedule.png)
+
+---
+
+## 👥 Teacher Class Roster
+
+![Teacher Class Roster](project-file/teacher_class_roster.png)
+
+---
+
+## ✍️ Manual Attendance
+
+![Manual Attendance](project-file/manual_attendance.png)
+
+---
+
+## 📑 Attendance Logs
+
+![Attendance Logs](project-file/period_logs.png)
+
+---
+
+## 📄 Attendance Report
+
+![Report](project-file/report.png)
+
+---
+
+## 👥 Staff Management
+
+![Manage Staff](project-file/manage_staff.png)
+
+---
+
+## 🎓 Student Enrollment
+
+![Enrollment](project-file/enrolled.png)
+
+---
+
+## ⬆️ Promote Students
+
+![Promote Students](project-file/promote.png)
+
+---
+
+## 🔐 Signup Page
+
+![Signup](project-file/signup_page.png)
 
 ---
 
@@ -458,16 +490,12 @@ Teachers can:
 
 - 📱 Mobile Application
 - ☁️ Cloud Deployment
-- 📧 Email Notifications
 - 📊 Advanced Analytics Dashboard
 - 🌐 Multi-Campus Support
 - 📍 GPS-Based Attendance
-- 🔔 Real-time Notifications
-- 📥 Excel & PDF Report Export
 - 🌙 Dark Mode
 - 🔐 Two-Factor Authentication
 - 🎭 Anti-Spoofing Detection
-- 😊 Emotion Detection
 - 👥 Multi-Face Recognition
 - 📹 CCTV Camera Integration
 
